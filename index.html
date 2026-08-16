@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -90,6 +90,7 @@ pre#json{ flex:1; background:#0b0d12; border:1px solid #23262e; border-radius:10
   <span class="sub">原型骨架 × 主题肌理 = 演绎内容</span>
   <span class="spacer"></span>
   <span id="status">主题：<b>–</b> ｜ 阶段：–</span>
+  <button class="btn" id="btnMode">🏗 骨架对照</button>
   <button class="btn" id="btnDice">🎲 抽主题</button>
   <button class="btn" id="btnReroll">🔀 换一套演绎</button>
   <button class="btn" id="btnPlay">▶ 播放过程</button>
@@ -133,11 +134,11 @@ pre#json{ flex:1; background:#0b0d12; border:1px solid #23262e; border-radius:10
   </aside>
 </div>
 
-<script>
-"use strict";
+<script>"use strict";
 const $ = s => document.querySelector(s);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+/* ---------- 常量 ---------- */
 const CAT_COLORS = { 实体:'#3b82f6', 属性:'#eab308', 关系:'#a855f7', 约束:'#ef4444', 意义:'#22c55e', 因果:'#f59e0b', 选择:'#ec4899' };
 
 const SLOTS = [
@@ -145,18 +146,19 @@ const SLOTS = [
   {id:'env',   cat:'属性', type:'属性·环境',   label:'环境节点'},
   {id:'npc',   cat:'实体', type:'实体·人物',   label:'人物节点'},
   {id:'item',  cat:'实体', type:'实体·物品',   label:'物品节点'},
+  {id:'loc',   cat:'实体', type:'实体·地点',   label:'地点节点'},
   {id:'cnt',   cat:'属性', type:'属性·数量',   label:'数量节点'},
   {id:'time',  cat:'属性', type:'属性·时间',   label:'时间节点'},
   {id:'limit', cat:'约束', type:'约束·限制',   label:'限制节点'},
-  {id:'act',   cat:'关系', type:'关系·动作',   label:'动作节点'},
   {id:'skill', cat:'属性', type:'属性·能力',   label:'能力节点'},
+  {id:'act',   cat:'关系', type:'关系·动作',   label:'动作节点'},
   {id:'choice',cat:'选择', type:'选择·道德选择',label:'选择节点'},
   {id:'res',   cat:'意义', type:'意义·结果',   label:'结果节点'},
   {id:'karma', cat:'因果', type:'因果·业力',   label:'业力节点'},
-  {id:'evt',   cat:'实体', type:'实体·事件',   label:'事件节点'},
-  {id:'req2',  cat:'意义', type:'意义·需求',   label:'新需求节点（回环锚）'}
+  {id:'evt',   cat:'实体', type:'实体·事件',   label:'事件节点'}
 ];
 const SLOT = Object.fromEntries(SLOTS.map(s => [s.id, s]));
+const LABEL = s => (Object.fromEntries(SLOTS.map(x => [x.type, x.label])))[s];
 
 const EDGES = [
   {from:'req',   to:'env',    pred:'需要当前环境是'},
@@ -171,145 +173,309 @@ const EDGES = [
   {from:'choice',to:'res',    pred:'则'},
   {from:'res',   to:'karma',  pred:'回写'},
   {from:'karma', to:'evt',    pred:'牵引'},
-  {from:'evt',   to:'req2',   pred:'生 · 新需求浮现'}
+  {from:'evt',   to:'req',    pred:'生 · 新需求浮现'}
 ];
 
+/* 可链接类型表（分类器·出链） */
+const LINK = {
+  '意义·需求':   ['属性·环境','实体·物品','实体·人物','实体·地点','属性·数量','属性·时间','属性·能力','关系·动作'],
+  '属性·环境':   ['实体·人物','关系·动作','约束·限制'],
+  '实体·人物':   ['实体·物品','实体·地点','意义·需求','属性·时间','属性·环境','因果·业力'],
+  '实体·物品':   ['实体·人物','实体·地点','属性·数量','意义·需求'],
+  '实体·地点':   ['实体·人物','实体·物品','实体·事件','属性·环境','选择·道德选择'],
+  '属性·数量':   ['实体·物品','意义·需求','因果·业力'],
+  '属性·时间':   ['实体·事件','意义·需求','约束·限制'],
+  '约束·限制':   ['关系·动作','实体·人物','实体·地点'],
+  '属性·能力':   ['关系·动作'],
+  '关系·动作':   ['选择·道德选择','意义·结果','实体·人物','实体·物品'],
+  '选择·道德选择':['意义·结果','因果·业力','意义·需求'],
+  '意义·结果':   ['因果·业力','实体·事件','实体·物品','意义·需求'],
+  '因果·业力':   ['实体·事件','意义·需求'],
+  '实体·事件':   ['意义·结果','意义·需求']
+};
+
+/* 谓词表（fromType>toType） */
+const PRED = {
+  '意义·需求>属性·环境':'需要当前环境是', '意义·需求>实体·物品':'需要', '意义·需求>实体·人物':'需要相助',
+  '意义·需求>实体·地点':'需要抵达', '意义·需求>属性·数量':'需要', '意义·需求>属性·时间':'须在',
+  '意义·需求>属性·能力':'需要具备', '意义·需求>关系·动作':'需要行',
+  '属性·环境>实体·人物':'此环境下', '属性·环境>关系·动作':'在其中', '属性·环境>约束·限制':'须避',
+  '实体·人物>实体·物品':'持有', '实体·人物>实体·地点':'居于', '实体·人物>意义·需求':'有心愿',
+  '实体·人物>属性·时间':'在…时在场', '实体·人物>属性·环境':'困于', '实体·人物>因果·业力':'背着',
+  '实体·物品>实体·人物':'由…所持', '实体·物品>实体·地点':'存放于', '实体·物品>属性·数量':'需',
+  '实体·物品>意义·需求':'是所需',
+  '实体·地点>实体·人物':'在此地', '实体·地点>实体·物品':'藏有', '实体·地点>实体·事件':'将发生',
+  '实体·地点>属性·环境':'当下', '实体·地点>选择·道德选择':'是分歧点',
+  '属性·数量>实体·物品':'份', '属性·数量>意义·需求':'量为', '属性·数量>因果·业力':'增',
+  '属性·时间>实体·事件':'定于', '属性·时间>意义·需求':'须在', '属性·时间>约束·限制':'限',
+  '约束·限制>关系·动作':'约束', '约束·限制>实体·人物':'不与', '约束·限制>实体·地点':'不入',
+  '属性·能力>关系·动作':'凭此方能',
+  '关系·动作>选择·道德选择':'或', '关系·动作>意义·结果':'则', '关系·动作>实体·人物':'对', '关系·动作>实体·物品':'用',
+  '选择·道德选择>意义·结果':'则', '选择·道德选择>因果·业力':'改', '选择·道德选择>意义·需求':'牵出',
+  '意义·结果>因果·业力':'回写', '意义·结果>实体·事件':'之后', '意义·结果>实体·物品':'获得', '意义·结果>意义·需求':'浮现新',
+  '因果·业力>实体·事件':'牵引', '因果·业力>意义·需求':'生',
+  '实体·事件>意义·结果':'导致', '实体·事件>意义·需求':'后生'
+};
+const predOf = (a, b) => PRED[a.type + '>' + b.type] || '→';
+
+/* 主题（词池 + 组合演绎） */
 const THEMES = [
   {
     id:'monk', name:'和尚·施舍', color:'#eab308',
     tagline:'一钵一饭，皆为化缘', tone:'悲悯 · 平静',
-    slots:{
-      req:['果腹之需','冬夜暖饭','供奉之诚'],
-      env:['雪冬·荒年','骤雪封路','深秋寒雨'],
-      npc:['布施老妪','清贫村妇','山脚老樵'],
-      item:['半袋陈米','一钵热粥','三束干柴'],
-      cnt:['三升米','一钵温食','两捆柴'],
-      time:['午时之前','日落之前','更鼓响前'],
-      limit:['戒荤·不叩富户','不恶语·不妄求','受施必诵经回向'],
-      skill:['化缘礼数','受施之仪','随缘之心'],
-      act:['叩门乞食','站寺前诵偈','沿街托钵'],
-      choice:['施米或闭门','予粥或送客','舍柴或留饭'],
-      res:['功德+1','施主欢喜','化缘人缘+1'],
-      karma:['业障-1','福田+1','善缘+1'],
-      evt:['布施者渐多','寺门香火转盛','村中馈赠相继'],
-      req2:['还愿之心','讲经之邀','供养之求']
-    },
-    story:'老僧托钵入雪村，一饮一啄皆为化缘；施主以米饭之，和尚回向诵经，功德回流成来日之缘。',
+    pool:[
+      {id:'req1',  type:'意义·需求',   words:['果腹之需','冬夜暖饭']},
+      {id:'req2',  type:'意义·需求',   words:['供奉之诚']},
+      {id:'env1',  type:'属性·环境',   words:['雪冬·荒年']},
+      {id:'env2',  type:'属性·环境',   words:['骤雪封路','深秋寒雨']},
+      {id:'npc1',  type:'实体·人物',   words:['布施老妪']},
+      {id:'npc2',  type:'实体·人物',   words:['清贫村妇','山脚老樵']},
+      {id:'npc3',  type:'实体·人物',   words:['行脚商贩']},
+      {id:'loc1',  type:'实体·地点',   words:['村口石桥','东村仓廪']},
+      {id:'loc2',  type:'实体·地点',   words:['山门古槐','井台']},
+      {id:'it1',   type:'实体·物品',   words:['半袋陈米','三束干柴']},
+      {id:'it2',   type:'实体·物品',   words:['一钵热粥','旧棉衣']},
+      {id:'cnt1',  type:'属性·数量',   words:['三升米']},
+      {id:'cnt2',  type:'属性·数量',   words:['一钵温食']},
+      {id:'tm1',   type:'属性·时间',   words:['午时之前']},
+      {id:'tm2',   type:'属性·时间',   words:['日落之前']},
+      {id:'lm1',   type:'约束·限制',   words:['戒荤·不叩富户']},
+      {id:'lm2',   type:'约束·限制',   words:['不恶语·不妄求']},
+      {id:'sk1',   type:'属性·能力',   words:['化缘礼数']},
+      {id:'sk2',   type:'属性·能力',   words:['受施之仪']},
+      {id:'ac1',   type:'关系·动作',   words:['叩门乞食']},
+      {id:'ac2',   type:'关系·动作',   words:['诵偈受施','沿街托钵']},
+      {id:'ch1',   type:'选择·道德选择', words:['施米或闭门']},
+      {id:'ch2',   type:'选择·道德选择', words:['予粥或送客']},
+      {id:'rs1',   type:'意义·结果',   words:['功德+1']},
+      {id:'rs2',   type:'意义·结果',   words:['施主欢喜']},
+      {id:'km1',   type:'因果·业力',   words:['业障-1']},
+      {id:'km2',   type:'因果·业力',   words:['善缘+1']},
+      {id:'ev1',   type:'实体·事件',   words:['布施者渐多','邻坊相馈']},
+      {id:'ev2',   type:'实体·事件',   words:['寺门香火转盛']}
+    ],
     combo:['在{env}中{act}', '向{npc}求得{cnt}，须在{time}{act}', '{res}随布施而来', '{evt}后生{req2}'],
     templates:[
       '因{req}，于{env}造访{npc}；彼持有{item}，需{cnt}，须在{time}{act}，守{limit}，凭{skill}而行；择{choice}，成则{res}、{karma}；事毕{evt}，继而{req2}。',
       '{npc}身处{env}，为{req}所困，愿以{item}相济，量{cnt}；须在{time}{act}，戒{limit}，凭{skill}；或{choice}，行则{res}与{karma}；{evt}之后，心念转成{req2}。'
-    ]
+    ],
+    story:'老僧托钵入雪村，一饮一啄皆为化缘；施主以米饭之，和尚回向诵经，功德回流成来日之缘。'
   },
   {
     id:'taoist', name:'道士·降妖', color:'#8b5cf6',
     tagline:'月蚀之夜，妖祟叩村', tone:'肃然 · 神秘',
-    slots:{
-      req:['除祟之愿','镇宅安宁','收妖之心'],
-      env:['月蚀之夜','阴风灌巷','坟山起雾'],
-      npc:['惊惶乡绅','猎户之子','夜哭幼童'],
-      item:['镇妖符箓','桃木剑','八卦铜镜'],
-      cnt:['七道镇符','三枚铜钱','一炉净香'],
-      time:['子时之前','鸡鸣之前','三更之内'],
-      limit:['不可伤生魂','夜半不开坛','不可扰孤魂'],
-      skill:['画符之能','望气之法','步罡踏斗'],
-      act:['设坛镇妖','贴符封井','布阵驱祟'],
-      choice:['镇杀或度化','追剿或安抚','强镇或谈判'],
-      res:['妖胆+1','乡民拜谢','妖气-1'],
-      karma:['怨气-1','降妖功德+1','阴阳债清一分'],
-      evt:['妖声渐息','邪雾散尽','夜啼止于三更'],
-      req2:['护村之约','云游降妖之誓','清修之愿']
-    },
-    story:'月蚀之夜，妖祟叩村；道者设坛七符镇之，镇与度一念之间，怨气与功德同生同灭。',
+    pool:[
+      {id:'req1', type:'意义·需求', words:['除祟之愿']},
+      {id:'req2', type:'意义·需求', words:['镇宅安宁']},
+      {id:'env1', type:'属性·环境', words:['月蚀之夜']},
+      {id:'env2', type:'属性·环境', words:['坟山起雾']},
+      {id:'env3', type:'属性·环境', words:['阴风灌巷']},
+      {id:'npc1', type:'实体·人物', words:['惊惶乡绅']},
+      {id:'npc2', type:'实体·人物', words:['猎户之子']},
+      {id:'npc3', type:'实体·人物', words:['夜哭幼童']},
+      {id:'loc1', type:'实体·地点', words:['荒废道观']},
+      {id:'loc2', type:'实体·地点', words:['村口老井']},
+      {id:'loc3', type:'实体·地点', words:['乱葬岗']},
+      {id:'it1',  type:'实体·物品', words:['镇妖符箓']},
+      {id:'it2',  type:'实体·物品', words:['桃木剑']},
+      {id:'it3',  type:'实体·物品', words:['八卦铜镜']},
+      {id:'cnt1', type:'属性·数量', words:['七道镇符']},
+      {id:'cnt2', type:'属性·数量', words:['三枚铜钱']},
+      {id:'tm1',  type:'属性·时间', words:['子时之前']},
+      {id:'tm2',  type:'属性·时间', words:['鸡鸣之前']},
+      {id:'lm1',  type:'约束·限制', words:['不可伤生魂']},
+      {id:'lm2',  type:'约束·限制', words:['夜半不开坛']},
+      {id:'sk1',  type:'属性·能力', words:['画符之能']},
+      {id:'sk2',  type:'属性·能力', words:['望气之法']},
+      {id:'ac1',  type:'关系·动作', words:['设坛镇妖']},
+      {id:'ac2',  type:'关系·动作', words:['贴符封井']},
+      {id:'ch1',  type:'选择·道德选择', words:['镇杀或度化']},
+      {id:'ch2',  type:'选择·道德选择', words:['追剿或安抚']},
+      {id:'rs1',  type:'意义·结果', words:['妖胆+1']},
+      {id:'rs2',  type:'意义·结果', words:['乡民拜谢']},
+      {id:'km1',  type:'因果·业力', words:['怨气-1']},
+      {id:'km2',  type:'因果·业力', words:['降妖功德+1']},
+      {id:'ev1',  type:'实体·事件', words:['妖声渐息']},
+      {id:'ev2',  type:'实体·事件', words:['邪雾散尽']}
+    ],
     combo:['趁{env}设坛{act}', '以{item}{cnt}封镇', '择{choice}则{res}', '{evt}，妖氛为之一清'],
     templates:[
       '时值{env}，{npc}为{req}所扰；以{item}为凭，备{cnt}，须在{time}{act}，忌{limit}，凭{skill}施行；{choice}二途，镇则{res}、{karma}；事毕{evt}，乃起{req2}。',
       '{npc}迫于{req}，正逢{env}；持{item}{cnt}，须在{time}设坛{act}，依{limit}，以{skill}制之；取舍{choice}，得{res}与{karma}；{evt}后，立成{req2}。'
-    ]
+    ],
+    story:'月蚀之夜，妖祟叩村；道者设坛七符镇之，镇与度一念之间，怨气与功德同生同灭。'
   },
   {
     id:'escort', name:'镖师·护送', color:'#3b82f6',
     tagline:'镖在人在，信义先行', tone:'苍劲 · 豪迈',
-    slots:{
-      req:['押送镖银','送达红货','信守镖约'],
-      env:['雨天·泥道','暑热官道','雾锁山隘'],
-      npc:['雇主商贾','同路脚夫','拦路劫匪'],
-      item:['三箱镖银','一口红货','十二匹驮马'],
-      cnt:['三箱'], 
-      time:['七日之内','立秋之前','单日赶尽'],
-      limit:['不可查验镖货','镖在人在','不入黑店'],
-      skill:['走镖规矩','查路之术','交割之仪'],
-      act:['押镖赶路','结伴夜行','鸣镖开道'],
-      choice:['硬闯或绕道','破财或动手','弃货或死守'],
-      res:['镖银交讫','镖局声望+1','雇主结契'],
-      karma:['信义+1','江湖名望+1','道上人情+1'],
-      evt:['道上风波渐平','前后镖车会合','劫道者退避'],
-      req2:['下一趟镖约','寻更快镖道','还镖局人情']
-    },
-    story:'雨夜泥道，三箱镖银在肩；镖在人在是铁律，绕道或硬闯一念之间，信义积为来日江湖之路。',
+    pool:[
+      {id:'req1', type:'意义·需求', words:['押送镖银']},
+      {id:'req2', type:'意义·需求', words:['送达红货']},
+      {id:'env1', type:'属性·环境', words:['雨天·泥道']},
+      {id:'env2', type:'属性·环境', words:['雾锁山隘']},
+      {id:'env3', type:'属性·环境', words:['暑热官道']},
+      {id:'npc1', type:'实体·人物', words:['雇主商贾']},
+      {id:'npc2', type:'实体·人物', words:['同路脚夫']},
+      {id:'npc3', type:'实体·人物', words:['拦路劫匪']},
+      {id:'loc1', type:'实体·地点', words:['官道驿站']},
+      {id:'loc2', type:'实体·地点', words:['黑风岭隘口']},
+      {id:'loc3', type:'实体·地点', words:['渡口码头']},
+      {id:'it1',  type:'实体·物品', words:['三箱镖银']},
+      {id:'it2',  type:'实体·物品', words:['一口红货']},
+      {id:'it3',  type:'实体·物品', words:['十二匹驮马']},
+      {id:'cnt1', type:'属性·数量', words:['三箱']},
+      {id:'cnt2', type:'属性·数量', words:['二百两']},
+      {id:'tm1',  type:'属性·时间', words:['七日之内']},
+      {id:'tm2',  type:'属性·时间', words:['立秋之前']},
+      {id:'lm1',  type:'约束·限制', words:['不可查验镖货']},
+      {id:'lm2',  type:'约束·限制', words:['不入黑店']},
+      {id:'sk1',  type:'属性·能力', words:['走镖规矩']},
+      {id:'sk2',  type:'属性·能力', words:['查路之术']},
+      {id:'ac1',  type:'关系·动作', words:['押镖赶路']},
+      {id:'ac2',  type:'关系·动作', words:['鸣镖开道']},
+      {id:'ch1',  type:'选择·道德选择', words:['硬闯或绕道']},
+      {id:'ch2',  type:'选择·道德选择', words:['破财或动手']},
+      {id:'rs1',  type:'意义·结果', words:['镖银交讫']},
+      {id:'rs2',  type:'意义·结果', words:['镖局声望+1']},
+      {id:'km1',  type:'因果·业力', words:['信义+1']},
+      {id:'km2',  type:'因果·业力', words:['道上人情+1']},
+      {id:'ev1',  type:'实体·事件', words:['风波渐平']},
+      {id:'ev2',  type:'实体·事件', words:['前后镖车会合']}
+    ],
     combo:['于{env}中{act}', '押{item}共{cnt}', '限{time}交讫', '{res}记入信义账'],
     templates:[
       '接{req}，押{item}{cnt}，行于{env}，限{time}，遵{limit}，凭{skill}一路{act}；遇{choice}，成则{res}、{karma}；{evt}，乃约{req2}。',
       '镖银在肩：{item}{cnt}须于{time}送达{npc}处，过{env}，守{limit}，凭{skill}{act}；岔道处{choice}，平安则{res}、{karma}；{evt}，遂定{req2}。'
-    ]
+    ],
+    story:'雨夜泥道，三箱镖银在肩；镖在人在是铁律，绕道或硬闯一念之间，信义积为来日江湖之路。'
   },
   {
     id:'doctor', name:'医者·采药', color:'#22c55e',
     tagline:'一株灵芝，一条人命', tone:'温厚 · 清苦',
-    slots:{
-      req:['救命之药','续命之草','解疫之方'],
-      env:['雨后·开春','崖深雾重','毒瘴渐起'],
-      npc:['病重村童','咳喘老翁','产难妇人'],
-      item:['灵芝草','千年雪莲','金线蛇胆'],
-      cnt:['两株芝','三朵莲','十钱蛇胆'],
-      time:['药力消散前','三日之内','星落之前'],
-      limit:['不可伤幼苗','不可断根求药','先救人后顾己'],
-      skill:['辨药之能','炮炙之法','望闻问切'],
-      act:['攀崖采药','入瘴采莲','夜熬药汤'],
-      choice:['自用或献药','先治孩童或老翁','独采或携徒'],
-      res:['生机+1','村童转醒','医名+1'],
-      karma:['阴德+1','医缘+1','病气-1'],
-      evt:['村童转醒','瘴退病愈','药炉白烟续起'],
-      req2:['义诊之心','再访孤村','寻师门之方']
-    },
-    story:'雨后开春，崖上灵芝可救一命；辨药之手不伤幼苗，医者檐下无心之德，种下来日阴德。',
+    pool:[
+      {id:'req1', type:'意义·需求', words:['救命之药']},
+      {id:'req2', type:'意义·需求', words:['解疫之方']},
+      {id:'env1', type:'属性·环境', words:['雨后·开春']},
+      {id:'env2', type:'属性·环境', words:['崖深雾重']},
+      {id:'env3', type:'属性·环境', words:['毒瘴渐起']},
+      {id:'npc1', type:'实体·人物', words:['病重村童']},
+      {id:'npc2', type:'实体·人物', words:['咳喘老翁']},
+      {id:'npc3', type:'实体·人物', words:['产难妇人']},
+      {id:'loc1', type:'实体·地点', words:['崖壁药田']},
+      {id:'loc2', type:'实体·地点', words:['邻村小屋']},
+      {id:'loc3', type:'实体·地点', words:['山溪边']},
+      {id:'it1',  type:'实体·物品', words:['灵芝草']},
+      {id:'it2',  type:'实体·物品', words:['千年雪莲']},
+      {id:'it3',  type:'实体·物品', words:['金线蛇胆']},
+      {id:'cnt1', type:'属性·数量', words:['两株芝']},
+      {id:'cnt2', type:'属性·数量', words:['十钱蛇胆']},
+      {id:'tm1',  type:'属性·时间', words:['三日之内']},
+      {id:'tm2',  type:'属性·时间', words:['星落之前']},
+      {id:'lm1',  type:'约束·限制', words:['不可伤幼苗']},
+      {id:'lm2',  type:'约束·限制', words:['先救人后顾己']},
+      {id:'sk1',  type:'属性·能力', words:['辨药之能']},
+      {id:'sk2',  type:'属性·能力', words:['炮炙之法']},
+      {id:'ac1',  type:'关系·动作', words:['攀崖采药']},
+      {id:'ac2',  type:'关系·动作', words:['夜熬药汤']},
+      {id:'ch1',  type:'选择·道德选择', words:['自用或献药']},
+      {id:'ch2',  type:'选择·道德选择', words:['先治孩童或老翁']},
+      {id:'rs1',  type:'意义·结果', words:['生机+1']},
+      {id:'rs2',  type:'意义·结果', words:['村童转醒']},
+      {id:'km1',  type:'因果·业力', words:['阴德+1']},
+      {id:'km2',  type:'因果·业力', words:['医缘+1']},
+      {id:'ev1',  type:'实体·事件', words:['瘴退病愈']},
+      {id:'ev2',  type:'实体·事件', words:['药炉白烟续起']}
+    ],
     combo:['趁{env}{act}', '以{item}{cnt}入药', '{time}为药力大限', '{res}后{evt}'],
     templates:[
       '为{req}，趁{env}往{npc}处取{item}（{cnt}），须在{time}{act}，守{limit}，凭{skill}施行；{choice}二选，治则{res}、{karma}；{evt}，继而{req2}。',
       '{npc}之{req}刻不容缓；{env}间须{act}得{item}，量{cnt}，须在{time}回程，忌{limit}，凭{skill}；两难{choice}，善治则{res}、{karma}；{evt}后，医心成{req2}。'
-    ]
+    ],
+    story:'雨后开春，崖上灵芝可救一命；辨药之手不伤幼苗，医者檐下无心之德，种下来日阴德。'
   }
 ];
 
 /* ---------- 布局 ---------- */
-const ROW1 = ['req','env','npc','item','cnt'];
-const ROW2 = ['time','limit','act','skill','choice'];
-const ROW3 = ['res','karma','evt','req2'];
 const W = 170, H = 72;
-function pos(id){
-  const rows = [ROW1, ROW2, ROW3];
-  for(let r = 0; r < rows.length; r++){
-    const i = rows[r].indexOf(id);
-    if(i >= 0) return { x: 70 + i * 200, y: 100 + r * 250 };
-  }
-  return { x: 0, y: 0 };
+function chainPos(i, total){
+  const row = Math.floor(i / 5), col = i % 5;
+  const xc = (row % 2 === 1) ? (4 - col) : col;
+  return { x: 70 + xc * 200, y: 115 + row * 255 };
 }
-const ORDER = [...ROW1, ...ROW2, ...ROW3];
 
 /* ---------- 状态 ---------- */
-let state = { themeId: null, picks: {}, filled: [], shown: [], stage: '', token: 0, sel: null, tplIdx: 0 };
+let state = { mode:'roam', themeId:null, chain:[], edges:[], token:0, sel:null, roamLog:[], tplIdx:0 };
 
 const theme = id => THEMES.find(t => t.id === id);
-const pickFor = (tid, prev) => {
-  const t = theme(tid), picks = {};
-  for(const [slot, arr] of Object.entries(t.slots)){
-    if(arr.length === 1){ picks[slot] = arr[0]; continue; }
-    const shuffled = [...arr].sort(() => Math.random() - 0.5);
-    const avoid = prev && prev[slot] ? prev[slot] : null;
-    picks[slot] = shuffled.find(w => w !== avoid) || arr[0];
+const rand = arr => arr[Math.floor(Math.random() * arr.length)];
+const byTypeOf = t => { const m = {}; t.pool.forEach(n => (m[n.type] = m[n.type] || []).push(n)); return m; };
+const nodeOf = (n, content) => ({ id:n.id, cat:n.type.split('·')[0], type:n.type, label:LABEL(n.type), content });
+
+/* ---------- 随机漫游（逆序构建：后置定前置） ---------- */
+function roam(themeId){
+  const t = theme(themeId);
+  const byType = byTypeOf(t);
+  const log = [];
+  const pickFree = (type, used) => {
+    const list = (byType[type] || []).filter(n => !used.has(n.id));
+    return list.length ? rand(list) : null;
+  };
+  const res = rand(byType['意义·结果'] || []), km = rand(byType['因果·业力'] || []);
+  if(!res || !km){ return { chain:[], edges:[], log:['词池不足，无法漫游'] }; }
+  const chain = [res, km], edges = [{ from:res.id, to:km.id, pred:predOf(res, km) }];
+  const used = new Set([res.id, km.id]);
+  log.push(`[收束] 先定结局：${res.type}「${res.content}」→ ${km.type}「${km.content}」（后置）`);
+
+  const midLen = 4 + Math.floor(Math.random() * 3);
+  for(let i = 0; i < midLen; i++){
+    const head = chain[0];
+    const nextType = chain[1] ? chain[1].type : null;
+    let cands = t.pool.filter(n => !used.has(n.id) && (LINK[n.type] || []).includes(head.type));
+    const mixed = cands.filter(n => n.type !== nextType);
+    if(mixed.length) cands = mixed;
+    if(!cands.length){
+      log.push(`[剪枝] 无节点可连入「${head.type}」，提前收束（当前链长 ${chain.length}）`);
+      break;
+    }
+    const n = rand(cands);
+    chain.unshift(n);
+    edges.unshift({ from:n.id, to:head.id, pred:predOf(n, head) });
+    used.add(n.id);
+    log.push(`[漫游] ${n.type}「${n.content}」→ ${head.type}（候选 ${cands.length} 个）`);
   }
-  return picks;
-};
+
+  const tail = chain[chain.length - 1];
+  const ev = pickFree('实体·事件', used);
+  if(ev && (LINK[tail.type] || []).includes('实体·事件')){
+    chain.push(ev); edges.push({ from:tail.id, to:ev.id, pred:predOf(tail, ev) }); used.add(ev.id);
+    log.push(`[回环] ${tail.type}「${tail.content}」→ 事件「${ev.content}」`);
+    const req2 = pickFree('意义·需求', used);
+    if(req2 && (LINK[ev.type] || []).includes('意义·需求')){
+      chain.push(req2); edges.push({ from:ev.id, to:req2.id, pred:predOf(ev, req2) }); used.add(req2.id);
+      log.push(`[回环] 事件 → 新需求「${req2.content}」，链可再生长`);
+    }
+  } else {
+    log.push(`[剪枝] 无可回环事件节点`);
+  }
+  return { chain: chain.map(n => nodeOf(n, rand(n.words))), edges, log };
+}
+
+/* ---------- 固定骨架（对照模式） ---------- */
+function buildDemo(themeId){
+  const t = theme(themeId);
+  const byType = byTypeOf(t);
+  const first = type => { const l = byType[type] || []; return l.length ? l[0].words[0] : '？'; };
+  const demoTypes = ['req','env','npc','item','cnt','time','limit','skill','act','choice','res','karma','evt'];
+  const chain = demoTypes.map(id => { const s = SLOT[id]; return { id, cat:s.cat, type:s.type, label:s.label, content:first(s.type) }; });
+  const req2 = { id:'req2', cat:'意义', type:'意义·需求', label:'新需求节点（回环锚）', content:first('意义·需求') };
+  chain.push(req2);
+  const edges = [
+    ['req','env'],['env','npc'],['npc','item'],['item','cnt'],['cnt','time'],['time','limit'],
+    ['limit','act'],['skill','act'],['act','choice'],['choice','res'],['res','karma'],['karma','evt'],['evt','req']
+  ];
+  const E = edges.map(x => ({ from:x[0], to:x[1], pred:EDGES.find(e => e.from === x[0] && e.to === x[1]).pred }));
+  return { chain, edges:E, log:['固定骨架「化缘链 v1」：14 节点 13 边对照模式。'] };
+}
 
 /* ---------- 渲染 ---------- */
 const NS = 'http://www.w3.org/2000/svg';
@@ -330,70 +496,75 @@ function render(){
   el('path', { d:'M0,0L10,5L0,10z', fill:'#3a4152' }, null, marker);
   const t = theme(state.themeId);
   const accent = t ? t.color : '#3a4152';
+  const fillCount = state.fillCount || state.chain.length;
 
-  for(const s of SLOTS){
-    const p = pos(s.id), g = el('g', { class:'node', transform:`translate(${p.x - W/2},${p.y - H/2})`, 'data-id':s.id }, null, svg);
-    const filled = state.filled.includes(s.id);
-    const color = CAT_COLORS[s.cat];
+  for(let i = 0; i < state.chain.length; i++){
+    const s = state.chain[i], p = chainPos(i, state.chain.length);
+    const g = el('g', { class:'node', transform:`translate(${p.x - W/2},${p.y - H/2})`, 'data-id':s.id }, null, svg);
+    const filled = i < fillCount;
+    const color = CAT_COLORS[s.cat] || '#888';
     g.appendChild(el('rect', { x:0, y:0, width:W, height:H, rx:10, class:filled ? 'bg fill' : 'bg' }));
     const nm = g.appendChild(el('rect', { x:0, y:0, width:W, height:H, rx:10, class:'nm' }));
     nm.setAttribute('stroke', filled ? color : '#2a2f3d');
     if(state.sel === s.id) g.classList.add('sel');
-    if(state.stage === 'loop' && s.id === 'req2') g.classList.add('loop');
+    if(i === state.chain.length - 1 && s.type === '意义·需求') g.classList.add('loop');
     const t1 = g.appendChild(el('text', { x:10, y:17, class:'cls' }, s.cat + ' · ' + s.type));
     t1.setAttribute('fill', filled ? color : '#6f788c');
-    g.appendChild(el('text', { x:10, y:40, class:'cnt' }, filled ? state.picks[s.id] : '？待演绎'));
+    g.appendChild(el('text', { x:10, y:40, class:'cnt' }, filled ? s.content : '？待演绎'));
     g.appendChild(el('text', { x:10, y:61, class:'nid' }, s.id + ' ' + s.label));
-    const outN = EDGES.filter(e => e.from === s.id).length;
-    const out = el('text', { x:W - 10, y:61, class:'nid o', 'text-anchor':'end' }, `出链 ${outN}`);
-    g.appendChild(out);
+    const outArr = state.edges.filter(e => e.from === s.id);
+    g.appendChild(el('text', { x:W - 10, y:61, class:'nid o', 'text-anchor':'end' }, '出链 ' + outArr.length));
     g.addEventListener('click', () => selectNode(s.id));
   }
 
-  const idOf = e => `${e.from}>${e.to}`;
-  for(const e of EDGES){
-    const a = pos(e.from), b = pos(e.to);
+  for(const e of state.edges){
+    const ia = state.chain.findIndex(n => n.id === e.from), ib = state.chain.findIndex(n => n.id === e.to);
+    if(ia < 0 || ib < 0) continue;
+    const a = chainPos(ia, state.chain.length), b = chainPos(ib, state.chain.length);
     const fx = a.x, fy = a.y + H/2, tx = b.x, ty = b.y - H/2;
     const dx = tx - fx, dy = ty - fy, horiz = Math.abs(dx) > Math.abs(dy);
     const c1 = horiz ? `${fx + dx*0.45},${fy}` : `${fx},${fy + dy*0.45}`;
     const c2 = horiz ? `${tx - dx*0.45},${ty}` : `${tx},${ty - dy*0.45}`;
-    const show = state.shown.includes(idOf(e));
-    const path = el('path', { d:`M${fx},${fy} C${c1} ${c2} ${tx},${ty}`, class:show ? 'edge show' : 'edge', 'marker-end':'url(#arrow)', 'data-edge':idOf(e) }, svg);
+    const show = (ia < fillCount && ib < fillCount);
+    const path = el('path', { d:`M${fx},${fy} C${c1} ${c2} ${tx},${ty}`, class:show ? 'edge show' : 'edge', 'marker-end':'url(#arrow)', 'data-edge':`${e.from}>${e.to}` }, null, svg);
     if(show) path.setAttribute('stroke', accent);
-    const mx = (fx + tx) / 2, my = (fy + ty) / 2;
-    const label = el('text', { x:mx, y:my - 6, class:show ? 'edge-label show' : 'edge-label', 'text-anchor':'middle', 'paint-order':'stroke', 'stroke':'#10131a', 'stroke-width':4 }, e.pred, svg);
+    const label = el('text', { x:(fx+tx)/2, y:(fy+ty)/2 - 6, class:show ? 'edge-label show' : 'edge-label', 'text-anchor':'middle', 'paint-order':'stroke', 'stroke':'#10131a', 'stroke-width':4 }, e.pred, svg);
     label.setAttribute('fill', show ? '#d7e0f0' : '#767f93');
   }
 }
 
+function nodeById(id){
+  return state.chain.find(n => n.id === id) || null;
+}
 function selectNode(id){
+  const s = nodeById(id);
+  if(!s) return;
   state.sel = id;
-  const s = SLOT[id], t = theme(state.themeId);
-  const d = $('#detail');
-  const color = CAT_COLORS[s.cat];
-  const content = state.picks[id] || '？';
-  const inEdges = EDGES.filter(e => e.to === id).map(e => `[${SLOT[e.from].type}] ${e.pred} → 这里`).join('<br>') || '（无入链）';
-  const outEdges = EDGES.filter(e => e.from === id).map(e => `这里 ${e.pred} → [${SLOT[e.to].type}]`).join('<br>') || '（无出链 — 触达新需求锚或死端）';
-  d.innerHTML =
-    `<span class="d-name" style="color:${color}">${s.label}</span>` +
-    `<div class="d-type" style="color:${color}">${s.cat} · ${s.type} ｜ ${t ? t.name : '未命中主题'}肌理</div>` +
-    `<div class="d-content">${content}</div>` +
-    `<div class="links"><div><b>入链</b><br>${inEdges}</div>` +
-    `<div style="margin-top:6px"><b>出链</b><br>${outEdges}</div></div>`;
-  render();
+  const color = CAT_COLORS[s.cat] || '#888';
+  const t = theme(state.themeId);
+  const inE = state.edges.filter(e => e.to === id);
+  const outE = state.edges.filter(e => e.from === id);
+  const desc = e => { const nb = nodeById(e.from === id ? e.to : e.from); return `[${nb ? nb.type : '?'}] ${e.pred}`; };
+  let html = `<span class="d-name" style="color:${color}">${s.label}</span>` +
+    `<div class="d-type" style="color:${color}">${s.cat} · ${s.type} ｜ ${t ? t.name : ''}肌理 ｜ ${s.id}</div>` +
+    `<div class="d-content">${s.content}</div>` +
+    `<div class="links"><div><b>入链</b><br>${inE.length ? inE.map(desc).join('<br>') : '（无入链）'}</div>` +
+    `<div style="margin-top:6px"><b>出链</b><br>${outE.length ? outE.map(desc).join('<br>') : '（无出链，链已到头）'}</div>` +
+    `<div style="margin-top:6px;color:#7b8496;font-size:11px"><b>可链接类型</b><br>${(LINK[s.type]||['无']).join(' / ')}</div></div>`;
+  $('#detail').innerHTML = html;
 }
 
-/* ---------- 过程 ---------- */
+/* ---------- 主题卡片 / 词库 / 过程 ---------- */
 function renderThemes(){
   const box = $('#themes');
   box.innerHTML = '';
   for(const t of THEMES){
     const card = document.createElement('div');
     card.className = 'theme-card' + (state.themeId === t.id ? ' active' : '');
-    const n = Object.values(t.slots).reduce((a, arr) => a + arr.length, 0);
+    const n = t.pool.length;
     card.innerHTML =
       `<div class="t-name">${t.name}<span class="dot" style="background:${t.color}"></span></div>` +
-      `<div class="t-tag">${t.tagline} ｜ ${t.tone} ｜ 词组 ×${n}</div>`;
+      `<div class="t-tag">${t.tagline} ｜ ${t.tone} ｜ 词池 ×${n}</div>`;
     card.addEventListener('click', () => apply(t.id));
     box.appendChild(card);
   }
@@ -403,11 +574,11 @@ function renderThemes(){
 function renderWordbank(){
   const t = theme(state.themeId);
   if(!t){ $('#wb').innerHTML = ''; return; }
+  const by = byTypeOf(t);
   let html = '';
-  for(const s of SLOTS){
-    const words = t.slots[s.id];
-    html += `<div class="g"><div class="gl">${s.cat} · ${s.type} <b>（${s.label}）</b></div>` +
-      words.map(w => `<span class="chip">${w}</span>`).join('') + `</div>`;
+  for(const ty of Object.keys(by).sort()){
+    html += `<div class="g"><div class="gl">${ty} <b>（${LABEL(ty)}）</b></div>` +
+      by[ty].map(n => n.words.map(w => `<span class="chip">${w}</span>`).join('')).join('') + `</div>`;
   }
   $('#wb').innerHTML = html;
 }
@@ -420,32 +591,11 @@ function logDone(i){ document.querySelectorAll('#steps li')[i].className = 'done
 function logActive(i){ document.querySelectorAll('#steps li')[i].className = 'active'; }
 function setStatus(stage, extra){
   const t = theme(state.themeId);
-  $('#status').innerHTML = `主题：<b>${t ? t.name : '–'}</b> ｜ 阶段：${stage}${extra ? ' ｜ ' + extra : ''}`;
+  const m = state.mode === 'roam' ? '🌐 漫游' : '🏗 骨架';
+  $('#status').innerHTML = `${m} ｜ 主题：<b>${t ? t.name : '–'}</b> ｜ 阶段：${stage}${extra ? ' ｜ ' + extra : ''}`;
 }
 
-function buildJSON(){
-  const t = theme(state.themeId);
-  const r = compose(state.picks);
-  const obj = {
-    meta: { tool: '事件积木·肌理选择器', version: '0.2.0', skeleton: '化缘链 v1（14 节点 / 13 边）', atomModel: '21 原子 · 10 大类' },
-    result: {
-      theme: t.name, tagline: t.tagline, tone: t.tone, story: t.story,
-      recap: { sentence: r.sentence, combos: r.combos, steps: r.steps },
-      nodes: SLOTS.map(s => ({ id: s.id, cat: s.cat, type: s.type, content: state.picks[s.id] })),
-      edges: EDGES.map(e => ({ from: e.from, to: e.to, predicate: e.pred })),
-      loop: { from: 'evt', to: 'req2', via: 'karma', note: '结果回写业力，业力牵引新事件，新需求浮现——链可再生长' }
-    }
-  };
-  return JSON.stringify(obj, null, 2);
-}
-
-function emitJSON(){
-  const json = buildJSON();
-  $('#json').textContent = json;
-  return json;
-}
-
-/* ---------- 组合演绎（{} 可变槽位） ---------- */
+/* ---------- 组合演绎（{} 槽位） ---------- */
 function fillPlain(tpl, picks){
   return tpl.replace(/\{(\w+)\}/g, (m, id) => picks[id] || '？');
 }
@@ -453,96 +603,116 @@ function fillHtml(tpl, picks){
   return tpl.replace(/\{(\w+)\}/g, (m, id) =>
     '<span class="fv" title="' + (SLOT[id] ? SLOT[id].type : id) + '">' + (picks[id] || '？') + '</span>');
 }
-function compose(picks){
-  const t = theme(state.themeId);
-  const tpl = t.templates[state.tplIdx % t.templates.length];
-  return {
-    sentence: fillPlain(tpl, picks),
-    combos: t.combo.map(x => fillPlain(x, picks)),
-    steps: SLOTS.map(s => ({ slot: s.label, cat: s.cat, value: picks[s.id] || '？' }))
-  };
-}
 function renderRecap(){
   const t = theme(state.themeId);
   if(!t){ $('#recap').innerHTML = '<div class="hint">未命中主题</div>'; return; }
-  const tpl = t.templates[state.tplIdx % t.templates.length];
-  const r = compose(state.picks);
-  $('#recap').innerHTML =
-    '<div class="r-sentence">' + fillHtml(tpl, state.picks) + '</div>' +
-    '<div class="r-combos">' + t.combo.map(x => '<span class="r-combo">' + fillHtml(x, state.picks) + '</span>').join('') + '</div>' +
-    '<ol class="r-steps">' + r.steps.map(s => '<li><b>' + s.slot + '</b>：' + s.value + '</li>').join('') + '</ol>';
+  if(state.mode === 'roam'){
+    const sentence = state.chain.map(n => n.content).join('　→　');
+    const reopened = state.chain[state.chain.length - 1];
+    $('#recap').innerHTML =
+      '<div class="r-sentence">' + sentence + '</div>' +
+      '<div class="r-combos">' + state.roamLog.map(l => '<span class="r-combo">' + l + '</span>').join('') + '</div>' +
+      '<ol class="r-steps">' + state.chain.map((n, i) => '<li><b>' + n.label + '</b>：' + n.content + '</li>').join('') + '</ol>' +
+      (reopened && reopened.type === '意义·需求' ? '<div class="hint" style="margin-top:6px">回环完成：链尾再生新需求「' + reopened.content + '」，任务链可持续生长</div>' : '');
+  } else {
+    const tpl = t.templates[state.tplIdx % t.templates.length];
+    const picks = Object.fromEntries(state.chain.map(n => [n.id, n.content]));
+    $('#recap').innerHTML =
+      '<div class="r-sentence">' + fillHtml(tpl, picks) + '</div>' +
+      '<div class="r-combos">' + t.combo.map(x => '<span class="r-combo">' + fillHtml(x, picks) + '</span>').join('') + '</div>' +
+      '<ol class="r-steps">' + state.chain.map((n, i) => '<li><b>' + n.label + '</b>：' + n.content + '</li>').join('') + '</ol>';
+  }
 }
 
-/* ---------- 动画流程 ---------- */
+/* ---------- 结构体 ---------- */
+function buildJSON(){
+  const t = theme(state.themeId);
+  const reopened = state.chain[state.chain.length - 1];
+  const obj = {
+    meta: { tool: '事件积木·肌理选择器', version: '0.3.0', mode: state.mode === 'roam' ? '随机漫游（逆序构建）' : '固定骨架示范',
+            generation: '后置决定前置 · 缘起结构（此有故彼有）', atomModel: '21 原子 · 10 大类' },
+    result: {
+      theme: t.name, tagline: t.tagline, tone: t.tone, story: t.story,
+      nodes: state.chain.map(n => ({ id: n.id, cat: n.cat, type: n.type, content: n.content })),
+      edges: state.edges.map(e => ({ from: e.from, to: e.to, predicate: e.pred })),
+      recap: {
+        sentence: state.chain.map(n => n.content).join(' → '),
+        steps: state.chain.map(n => ({ slot: n.label, type: n.type, value: n.content })),
+        roamLog: state.roamLog
+      },
+      loop: reopened ? { from: state.edges.length ? state.edges[state.edges.length - 1].from : '', to: reopened.id,
+        note: reopened.type === '意义·需求' ? '回环再生新需求，链可再生长' : '未回环（漫游提前收束）' } : null
+    }
+  };
+  return JSON.stringify(obj, null, 2);
+}
+function emitJSON(){ $('#json').textContent = buildJSON(); }
+
+/* ---------- 流程 ---------- */
 async function apply(tid, animate = true){
   state.token++;
   const my = state.token;
+  state.themeId = tid;
+  renderThemes(); renderWordbank();
   if(!animate){
-    state.themeId = tid;
-    state.picks = pickFor(tid, state.picks);
-    state.filled = [...ORDER];
-    state.shown = EDGES.map(e => `${e.from}>${e.to}`);
-    state.stage = 'loop';
-    selectNode(state.sel = state.sel || 'req');
-    renderThemes(); renderWordbank(); renderRecap();
-    const json = emitJSON();
-    setStatus('回环就绪', '槽位 14/14');
-    $('#stepProg').textContent = `已应用主题「${theme(tid).name}」，共 ${Object.keys(json).length} 键结构体。`;
+    const gen = state.mode === 'roam' ? roam(tid) : buildDemo(tid);
+    state.chain = gen.chain; state.edges = gen.edges; state.roamLog = gen.log; state.fillCount = gen.chain.length;
+    state.stage = 'done';
+    selectNode(state.sel = state.chain[0] ? state.chain[0].id : null);
+    render(); emitJSON(); renderRecap();
+    setStatus('就绪', `${state.chain.length} 节点 / ${state.edges.length} 边`);
     return;
   }
-  state.themeId = tid;
-  state.picks = pickFor(tid, state.picks);
-  state.filled = []; state.shown = []; state.stage = 'skeleton';
-  logReset(); renderThemes(); renderWordbank();
-  setStatus('骨架', '14 节点 · 13 边');
+  logReset();
+  state.fillCount = 0;
+  logActive(0);
+  setStatus(state.mode === 'roam' ? '漫游生成' : '骨架', '');
+  $('#stepProg').textContent = state.mode === 'roam'
+    ? `🌐 随机漫游启动：从「${theme(tid).name}」词池（${theme(tid).pool.length} 节点）逆序构建，先定结局后推前置。`
+    : `🏗 固定骨架「化缘链 v1」加载。`;
   render();
-  logActive(0); $('#stepProg').textContent = `原型骨架「化缘链 v1」就绪：${SLOTS.length} 节点 / ${EDGES.length} 边，全部槽位待演绎。`;
-  await sleep(650);
-  if(my !== state.token) return;
-
+  await sleep(600); if(my !== state.token) return;
   logDone(0); logActive(1);
-  state.stage = 'theme';
-  setStatus('命中主题', theme(tid).name);
-  $('#stepProg').textContent = `命中主题「${theme(tid).name}」：载入 ${Object.values(theme(tid).slots).reduce((a, x) => a + x.length, 0)} 条演绎词组，标签「${theme(tid).tagline}」，基调 ${theme(tid).tone}。`;
-  render();
-  await sleep(600);
-  if(my !== state.token) return;
-
-  logDone(1); logActive(2);
-  state.stage = 'filling';
-  $('#stepProg').textContent = '逐槽演绎：';
-  for(const id of ORDER){
-    state.filled.push(id);
-    const okEdges = EDGES.filter(e => state.filled.includes(e.from) && state.filled.includes(e.to)).map(e => `${e.from}>${e.to}`);
-    state.shown = okEdges;
-    setStatus('演绎填充', `${state.filled.length}/${ORDER.length}`);
-    $('#stepProg').textContent = `逐槽演绎：${SLOT[id].cat}·${SLOT[id].type} ← «${state.picks[id]}»`;
+  if(state.mode === 'roam'){
+    const gen = roam(tid);
+    state.chain = gen.chain; state.edges = gen.edges; state.roamLog = gen.log;
+    state.fillCount = 0;
     render();
-    await sleep(110);
-    if(my !== state.token) return;
+    for(let i = 0; i < state.chain.length; i++){
+      state.fillCount = i + 1;
+      setStatus('漫游中', `${i + 1}/${state.chain.length}`);
+      $('#stepProg').textContent = state.roamLog[Math.min(i, state.roamLog.length - 1)] || '';
+      render();
+      await sleep(130); if(my !== state.token) return;
+    }
+  } else {
+    const gen = buildDemo(tid);
+    state.chain = gen.chain; state.edges = gen.edges; state.roamLog = gen.log;
+    $('#stepProg').textContent = `骨架就绪：${state.chain.length} 节点 / ${state.edges.length} 边。`;
+    render();
+    await sleep(400); if(my !== state.token) return;
   }
-
+  logDone(1); logActive(2);
+  setStatus('收束', '');
+  $('#stepProg').textContent = state.mode === 'roam' ? '收束与回环：结果 → 业力 → 事件 → 新需求。结构体与任务合述已导出。' : '演绎完成。结构体与任务合述已导出。';
+  state.stage = 'done';
+  render(); emitJSON(); renderRecap();
+  await sleep(350); if(my !== state.token) return;
   logDone(2); logActive(3);
-  state.stage = 'loop';
-  setStatus('回环就绪', '槽位 14/14');
-  $('#stepProg').textContent = '回环就绪：结果 → 业力 → 事件 → 新需求浮现，链可再生长。结构体与任务合述已导出。';
-  render();
-  emitJSON();
-  renderRecap();
-  await sleep(400);
-  if(my !== state.token) return;
+  await sleep(250); if(my !== state.token) return;
   logDone(3);
 }
 
 function reroll(){
   if(!state.themeId) return;
-  state.picks = pickFor(state.themeId, { ...state.picks });
-  state.filled = [...ORDER];
-  state.shown = EDGES.map(e => `${e.from}>${e.to}`);
-  state.stage = 'loop';
   state.tplIdx++;
+  const gen = state.mode === 'roam' ? roam(state.themeId) : buildDemo(state.themeId);
+  state.chain = gen.chain; state.edges = gen.edges; state.roamLog = gen.log; state.fillCount = gen.chain.length;
+  state.stage = 'done';
   render(); emitJSON(); renderRecap();
-  $('#stepProg').textContent = `🔀 在「${theme(state.themeId).name}」肌理内换了一套演绎词组与组合句（14 槽位重抽）。`;
+  $('#stepProg').textContent = state.mode === 'roam'
+    ? `🔀 重新漫游：${state.chain.length} 节点 / ${state.edges.length} 边（新随机路径）。`
+    : `🔀 骨架模式固定结构，逐字词重排（${state.themeId}）。`;
   if(state.sel) selectNode(state.sel);
 }
 
@@ -553,6 +723,12 @@ $('#btnDice').addEventListener('click', () => {
 });
 $('#btnReroll').addEventListener('click', reroll);
 $('#btnPlay').addEventListener('click', () => state.themeId && apply(state.themeId));
+$('#btnMode').addEventListener('click', () => {
+  state.mode = state.mode === 'roam' ? 'demo' : 'roam';
+  $('#btnMode').textContent = state.mode === 'roam' ? '🏗 骨架对照' : '🌐 随机漫游';
+  $('#stepProg').textContent = '';
+  if(state.themeId) apply(state.themeId, false);
+});
 $('#btnCopy').addEventListener('click', doCopy);
 $('#btnCopy2').addEventListener('click', doCopy);
 $('#btnDl').addEventListener('click', doDownload);
@@ -576,13 +752,14 @@ function doDownload(){
   const blob = new Blob([buildJSON()], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `theme-${t ? t.name : 'none'}.json`;
+  a.download = `${state.mode}-${t ? t.name : 'none'}.json`;
   a.click();
   URL.revokeObjectURL(a.href);
 }
 
 /* ---------- 启动 ---------- */
 apply(THEMES[0].id);
-</script>
+
+window.__t = { apply, roam, reroll, state, buildJSON, THEMES };</script>
 </body>
 </html>
