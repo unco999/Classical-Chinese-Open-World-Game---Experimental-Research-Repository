@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>事件积木 · 肌理选择器</title>
+<style>
+:root{ --accent:#eab308; }
+*{ box-sizing:border-box; }
+body{ margin:0; font-family:"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif; background:#0f1115; color:#e5e7eb; }
+header{ position:sticky; top:0; z-index:10; display:flex; align-items:center; gap:10px; padding:10px 16px; background:#13151b; border-bottom:1px solid #23262e; flex-wrap:wrap; }
+header h1{ font-size:16px; margin:0; font-weight:600; }
+header .sub{ font-size:11px; color:#8b93a7; }
+.spacer{ flex:1; }
+.btn{ cursor:pointer; border:1px solid #2a2f3d; background:#1a1e28; color:#e5e7eb; border-radius:8px; padding:6px 12px; font-size:12px; transition:.15s; }
+.btn:hover{ border-color:var(--accent); color:var(--accent); }
+#status{ font-size:12px; color:#9aa4bd; }
+#status b{ color:var(--accent); }
+.main{ display:grid; grid-template-columns:280px 1fr 380px; height:calc(100vh - 58px); }
+aside{ padding:12px; overflow-y:auto; border-right:1px solid #23262e; background:#11141b; }
+aside.right{ border-right:none; border-left:1px solid #23262e; }
+section{ margin-bottom:16px; }
+section h2{ font-size:11px; color:#7b8496; text-transform:uppercase; letter-spacing:1.5px; margin:0 0 8px; }
+.theme-card{ border:1px solid #23262e; border-radius:10px; padding:9px 11px; margin-bottom:8px; cursor:pointer; transition:.15s; background:#14171f; }
+.theme-card:hover{ border-color:#3a4152; transform:translateX(2px); }
+.theme-card.active{ border-color:var(--accent); background:#181c26; box-shadow:0 0 0 1px var(--accent); }
+.theme-card .t-name{ font-size:14px; font-weight:600; display:flex; justify-content:space-between; align-items:center; }
+.theme-card .t-name .dot{ width:8px; height:8px; border-radius:50%; display:inline-block; }
+.theme-card .t-tag{ font-size:11px; color:#8b93a7; margin-top:3px; }
+details{ border:1px solid #23262e; border-radius:10px; background:#14171f; padding:8px 10px; }
+summary{ cursor:pointer; font-size:12px; color:#b8c4e0; }
+.wb{ margin-top:8px; }
+.wb .g{ margin-bottom:8px; }
+.wb .g .gl{ font-size:11px; color:#7b8496; margin-bottom:3px; }
+.wb .g .gl b{ color:#9aa4bd; }
+.chip{ display:inline-block; font-size:11px; padding:2px 7px; margin:1px 2px; border-radius:6px; background:#1d2130; color:#c7cbe0; border:1px solid #2a2f3d; }
+#detail{ border:1px solid #23262e; border-radius:10px; background:#14171f; padding:10px; font-size:12px; }
+#detail .hint{ color:#7b8496; }
+#detail .d-name{ font-size:14px; font-weight:600; }
+#detail .d-type{ font-size:11px; margin:2px 0 6px; }
+#detail .d-content{ font-size:14px; margin:6px 0; color:#f3f4f6; }
+#detail .links{ margin-top:8px; }
+#detail .links div{ font-size:11px; color:#8b93a7; margin:2px 0; }
+#detail .links b{ color:#b8c4e0; }
+ol#steps{ margin:0; padding-left:0; list-style:none; counter-reset:s; }
+ol#steps li{ counter-increment:s; position:relative; padding:4px 0 4px 24px; font-size:12px; color:#6b7385; }
+ol#steps li::before{ content:counter(s); position:absolute; left:0; top:4px; width:17px; height:17px; border-radius:50%; border:1px solid #2a2f3d; font-size:10px; text-align:center; line-height:15px; color:#7b8496; }
+ol#steps li.done{ color:#9aa4bd; }
+ol#steps li.done::before{ background:#1d4ed8; border-color:#1d4ed8; color:#fff; }
+ol#steps li.active{ color:#e5e7eb; }
+ol#steps li.active::before{ background:var(--accent); border-color:var(--accent); color:#111; }
+#stepProg{ margin-top:6px; font-size:11px; color:#8b93a7; min-height:16px; }
+.center{ padding:10px; }
+svg#graph{ width:100%; height:100%; background:#10131a; border-radius:10px; border:1px solid #23262e; display:block; }
+.node{ cursor:pointer; }
+.node .bg{ fill:#151923; stroke:#2a2f3d; stroke-width:1; }
+.node .bg.fill{ fill:#171c28; }
+.node .cls{ fill:#6f788c; font-size:11px; }
+.node .cnt{ font-size:12.5px; fill:#55607a; }
+.node.fill .cnt{ fill:#e5e7eb; }
+.node .nid{ font-size:9.5px; fill:#4b5366; }
+.node .nid .o{ fill:#3d4557; }
+.node .nm{ stroke-width:2.5; fill:none; opacity:0; }
+.node.fill .nm{ opacity:1; }
+.node.loop .bg{ stroke-dasharray:5 4; }
+.node.sel .bg{ stroke:#ffffff; stroke-width:2; }
+.edge{ stroke:#2c3446; stroke-width:1.6; fill:none; }
+.edge.show{ stroke:#3d5066; stroke-width:1.8; }
+.edge-label{ fill:#767f93; font-size:10.5px; }
+.edge-label.show{ fill:#c7d1e3; }
+.legend{ fill:#5c6577; font-size:10.5px; }
+#recap{ border:1px solid #23262e; border-radius:10px; background:#14171f; padding:10px; margin-bottom:12px; font-size:12.5px; line-height:1.75; }
+#recap .hint{ color:#7b8496; }
+.fv{ color:var(--accent); font-weight:600; }
+.r-combos{ margin:10px 0; }
+.r-combo{ display:inline-block; font-size:11px; padding:2px 8px; margin:2px 2px 2px 0; border-radius:8px; background:#1a1f2c; border:1px dashed #3a4152; color:#c7cbe0; }
+.r-steps{ margin:6px 0 0; padding-left:0; list-style:none; font-size:12px; counter-reset:rs; }
+.r-steps li{ counter-increment:rs; margin:2px 0; color:#9aa4bd; }
+.r-steps li::before{ content:counter(rs); display:inline-block; width:15px; height:15px; border-radius:50%; background:#1d2130; color:#7b8496; font-size:10px; text-align:center; line-height:15px; margin-right:6px; }
+.r-steps b{ color:#d7e0f0; }
+#jsonWrap{ display:flex; flex-direction:column; height:100%; }
+#jsonBtns{ display:flex; gap:8px; margin-bottom:8px; }
+pre#json{ flex:1; background:#0b0d12; border:1px solid #23262e; border-radius:10px; padding:10px; font-size:11px; line-height:1.5; font-family:Consolas,"Courier New",monospace; color:#b8c4e0; overflow:auto; margin:0; white-space:pre; }
+.key{ color:#7dd3fc; } .str{ color:#a5d6a7; } .num{ color:#fcd34d; }
+</style>
+</head>
+<body>
+<header>
+  <h1>事件积木 · 肌理选择器</h1>
+  <span class="sub">原型骨架 × 主题肌理 = 演绎内容</span>
+  <span class="spacer"></span>
+  <span id="status">主题：<b>–</b> ｜ 阶段：–</span>
+  <button class="btn" id="btnDice">🎲 抽主题</button>
+  <button class="btn" id="btnReroll">🔀 换一套演绎</button>
+  <button class="btn" id="btnPlay">▶ 播放过程</button>
+  <button class="btn" id="btnCopy">⧉ 复制结构</button>
+  <button class="btn" id="btnDl">⬇ 导出 JSON</button>
+</header>
+<div class="main">
+  <aside class="left">
+    <section>
+      <h2>主题肌理库</h2>
+      <div id="themes"></div>
+    </section>
+    <section>
+      <h2>槽位词库（演绎词组）</h2>
+      <details id="wordbank"><summary>展开 14 个槽位</summary><div class="wb" id="wb"></div></details>
+    </section>
+    <section>
+      <h2>节点详情</h2>
+      <div id="detail"><div class="hint">点击图中节点，查看类型 / 内容 / 入链与出链</div></div>
+    </section>
+    <section>
+      <h2>过程展示</h2>
+      <ol id="steps"><li>原型骨架就绪</li><li>命中主题</li><li>演绎词组填充</li><li>回环就绪 · 结构体导出</li></ol>
+      <div id="stepProg"></div>
+    </section>
+  </aside>
+  <main class="center">
+    <svg id="graph" viewBox="0 0 1000 690" preserveAspectRatio="xMidYMid meet"></svg>
+  </main>
+  <aside class="right">
+    <div id="jsonWrap">
+      <h2>任务合述（{槽位} 组合演绎）</h2>
+      <div id="recap"></div>
+      <h2>最终结构（供游戏内逻辑消费）</h2>
+      <div id="jsonBtns">
+        <button class="btn" id="btnCopy2">⧉ 复制</button>
+        <button class="btn" id="btnDl2">⬇ 下载</button>
+      </div>
+      <pre id="json">{"waiting": true}</pre>
+    </div>
+  </aside>
+</div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+const CAT_COLORS = { 实体:'#3b82f6', 属性:'#eab308', 关系:'#a855f7', 约束:'#ef4444', 意义:'#22c55e', 因果:'#f59e0b', 选择:'#ec4899' };
+
+const SLOTS = [
+  {id:'req',   cat:'意义', type:'意义·需求',   label:'需求节点'},
+  {id:'env',   cat:'属性', type:'属性·环境',   label:'环境节点'},
+  {id:'npc',   cat:'实体', type:'实体·人物',   label:'人物节点'},
+  {id:'item',  cat:'实体', type:'实体·物品',   label:'物品节点'},
+  {id:'cnt',   cat:'属性', type:'属性·数量',   label:'数量节点'},
+  {id:'time',  cat:'属性', type:'属性·时间',   label:'时间节点'},
+  {id:'limit', cat:'约束', type:'约束·限制',   label:'限制节点'},
+  {id:'act',   cat:'关系', type:'关系·动作',   label:'动作节点'},
+  {id:'skill', cat:'属性', type:'属性·能力',   label:'能力节点'},
+  {id:'choice',cat:'选择', type:'选择·道德选择',label:'选择节点'},
+  {id:'res',   cat:'意义', type:'意义·结果',   label:'结果节点'},
+  {id:'karma', cat:'因果', type:'因果·业力',   label:'业力节点'},
+  {id:'evt',   cat:'实体', type:'实体·事件',   label:'事件节点'},
+  {id:'req2',  cat:'意义', type:'意义·需求',   label:'新需求节点（回环锚）'}
+];
+const SLOT = Object.fromEntries(SLOTS.map(s => [s.id, s]));
+
+const EDGES = [
+  {from:'req',   to:'env',    pred:'需要当前环境是'},
+  {from:'env',   to:'npc',    pred:'此环境下'},
+  {from:'npc',   to:'item',   pred:'持有'},
+  {from:'item',  to:'cnt',    pred:'需'},
+  {from:'cnt',   to:'time',   pred:'须在…之前'},
+  {from:'time',  to:'limit',  pred:'须守'},
+  {from:'limit', to:'act',    pred:'约束'},
+  {from:'skill', to:'act',    pred:'凭此方能'},
+  {from:'act',   to:'choice', pred:'或'},
+  {from:'choice',to:'res',    pred:'则'},
+  {from:'res',   to:'karma',  pred:'回写'},
+  {from:'karma', to:'evt',    pred:'牵引'},
+  {from:'evt',   to:'req2',   pred:'生 · 新需求浮现'}
+];
+
+const THEMES = [
+  {
+    id:'monk', name:'和尚·施舍', color:'#eab308',
+    tagline:'一钵一饭，皆为化缘', tone:'悲悯 · 平静',
+    slots:{
+      req:['果腹之需','冬夜暖饭','供奉之诚'],
+      env:['雪冬·荒年','骤雪封路','深秋寒雨'],
+      npc:['布施老妪','清贫村妇','山脚老樵'],
+      item:['半袋陈米','一钵热粥','三束干柴'],
+      cnt:['三升米','一钵温食','两捆柴'],
+      time:['午时之前','日落之前','更鼓响前'],
+      limit:['戒荤·不叩富户','不恶语·不妄求','受施必诵经回向'],
+      skill:['化缘礼数','受施之仪','随缘之心'],
+      act:['叩门乞食','站寺前诵偈','沿街托钵'],
+      choice:['施米或闭门','予粥或送客','舍柴或留饭'],
+      res:['功德+1','施主欢喜','化缘人缘+1'],
+      karma:['业障-1','福田+1','善缘+1'],
+      evt:['布施者渐多','寺门香火转盛','村中馈赠相继'],
+      req2:['还愿之心','讲经之邀','供养之求']
+    },
+    story:'老僧托钵入雪村，一饮一啄皆为化缘；施主以米饭之，和尚回向诵经，功德回流成来日之缘。',
+    combo:['在{env}中{act}', '向{npc}求得{cnt}，须在{time}{act}', '{res}随布施而来', '{evt}后生{req2}'],
+    templates:[
+      '因{req}，于{env}造访{npc}；彼持有{item}，需{cnt}，须在{time}{act}，守{limit}，凭{skill}而行；择{choice}，成则{res}、{karma}；事毕{evt}，继而{req2}。',
+      '{npc}身处{env}，为{req}所困，愿以{item}相济，量{cnt}；须在{time}{act}，戒{limit}，凭{skill}；或{choice}，行则{res}与{karma}；{evt}之后，心念转成{req2}。'
+    ]
+  },
+  {
+    id:'taoist', name:'道士·降妖', color:'#8b5cf6',
+    tagline:'月蚀之夜，妖祟叩村', tone:'肃然 · 神秘',
+    slots:{
+      req:['除祟之愿','镇宅安宁','收妖之心'],
+      env:['月蚀之夜','阴风灌巷','坟山起雾'],
+      npc:['惊惶乡绅','猎户之子','夜哭幼童'],
+      item:['镇妖符箓','桃木剑','八卦铜镜'],
+      cnt:['七道镇符','三枚铜钱','一炉净香'],
+      time:['子时之前','鸡鸣之前','三更之内'],
+      limit:['不可伤生魂','夜半不开坛','不可扰孤魂'],
+      skill:['画符之能','望气之法','步罡踏斗'],
+      act:['设坛镇妖','贴符封井','布阵驱祟'],
+      choice:['镇杀或度化','追剿或安抚','强镇或谈判'],
+      res:['妖胆+1','乡民拜谢','妖气-1'],
+      karma:['怨气-1','降妖功德+1','阴阳债清一分'],
+      evt:['妖声渐息','邪雾散尽','夜啼止于三更'],
+      req2:['护村之约','云游降妖之誓','清修之愿']
+    },
+    story:'月蚀之夜，妖祟叩村；道者设坛七符镇之，镇与度一念之间，怨气与功德同生同灭。',
+    combo:['趁{env}设坛{act}', '以{item}{cnt}封镇', '择{choice}则{res}', '{evt}，妖氛为之一清'],
+    templates:[
+      '时值{env}，{npc}为{req}所扰；以{item}为凭，备{cnt}，须在{time}{act}，忌{limit}，凭{skill}施行；{choice}二途，镇则{res}、{karma}；事毕{evt}，乃起{req2}。',
+      '{npc}迫于{req}，正逢{env}；持{item}{cnt}，须在{time}设坛{act}，依{limit}，以{skill}制之；取舍{choice}，得{res}与{karma}；{evt}后，立成{req2}。'
+    ]
+  },
+  {
+    id:'escort', name:'镖师·护送', color:'#3b82f6',
+    tagline:'镖在人在，信义先行', tone:'苍劲 · 豪迈',
+    slots:{
+      req:['押送镖银','送达红货','信守镖约'],
+      env:['雨天·泥道','暑热官道','雾锁山隘'],
+      npc:['雇主商贾','同路脚夫','拦路劫匪'],
+      item:['三箱镖银','一口红货','十二匹驮马'],
+      cnt:['三箱'], 
+      time:['七日之内','立秋之前','单日赶尽'],
+      limit:['不可查验镖货','镖在人在','不入黑店'],
+      skill:['走镖规矩','查路之术','交割之仪'],
+      act:['押镖赶路','结伴夜行','鸣镖开道'],
+      choice:['硬闯或绕道','破财或动手','弃货或死守'],
+      res:['镖银交讫','镖局声望+1','雇主结契'],
+      karma:['信义+1','江湖名望+1','道上人情+1'],
+      evt:['道上风波渐平','前后镖车会合','劫道者退避'],
+      req2:['下一趟镖约','寻更快镖道','还镖局人情']
+    },
+    story:'雨夜泥道，三箱镖银在肩；镖在人在是铁律，绕道或硬闯一念之间，信义积为来日江湖之路。',
+    combo:['于{env}中{act}', '押{item}共{cnt}', '限{time}交讫', '{res}记入信义账'],
+    templates:[
+      '接{req}，押{item}{cnt}，行于{env}，限{time}，遵{limit}，凭{skill}一路{act}；遇{choice}，成则{res}、{karma}；{evt}，乃约{req2}。',
+      '镖银在肩：{item}{cnt}须于{time}送达{npc}处，过{env}，守{limit}，凭{skill}{act}；岔道处{choice}，平安则{res}、{karma}；{evt}，遂定{req2}。'
+    ]
+  },
+  {
+    id:'doctor', name:'医者·采药', color:'#22c55e',
+    tagline:'一株灵芝，一条人命', tone:'温厚 · 清苦',
+    slots:{
+      req:['救命之药','续命之草','解疫之方'],
+      env:['雨后·开春','崖深雾重','毒瘴渐起'],
+      npc:['病重村童','咳喘老翁','产难妇人'],
+      item:['灵芝草','千年雪莲','金线蛇胆'],
+      cnt:['两株芝','三朵莲','十钱蛇胆'],
+      time:['药力消散前','三日之内','星落之前'],
+      limit:['不可伤幼苗','不可断根求药','先救人后顾己'],
+      skill:['辨药之能','炮炙之法','望闻问切'],
+      act:['攀崖采药','入瘴采莲','夜熬药汤'],
+      choice:['自用或献药','先治孩童或老翁','独采或携徒'],
+      res:['生机+1','村童转醒','医名+1'],
+      karma:['阴德+1','医缘+1','病气-1'],
+      evt:['村童转醒','瘴退病愈','药炉白烟续起'],
+      req2:['义诊之心','再访孤村','寻师门之方']
+    },
+    story:'雨后开春，崖上灵芝可救一命；辨药之手不伤幼苗，医者檐下无心之德，种下来日阴德。',
+    combo:['趁{env}{act}', '以{item}{cnt}入药', '{time}为药力大限', '{res}后{evt}'],
+    templates:[
+      '为{req}，趁{env}往{npc}处取{item}（{cnt}），须在{time}{act}，守{limit}，凭{skill}施行；{choice}二选，治则{res}、{karma}；{evt}，继而{req2}。',
+      '{npc}之{req}刻不容缓；{env}间须{act}得{item}，量{cnt}，须在{time}回程，忌{limit}，凭{skill}；两难{choice}，善治则{res}、{karma}；{evt}后，医心成{req2}。'
+    ]
+  }
+];
+
+/* ---------- 布局 ---------- */
+const ROW1 = ['req','env','npc','item','cnt'];
+const ROW2 = ['time','limit','act','skill','choice'];
+const ROW3 = ['res','karma','evt','req2'];
+const W = 170, H = 72;
+function pos(id){
+  const rows = [ROW1, ROW2, ROW3];
+  for(let r = 0; r < rows.length; r++){
+    const i = rows[r].indexOf(id);
+    if(i >= 0) return { x: 70 + i * 200, y: 100 + r * 250 };
+  }
+  return { x: 0, y: 0 };
+}
+const ORDER = [...ROW1, ...ROW2, ...ROW3];
+
+/* ---------- 状态 ---------- */
+let state = { themeId: null, picks: {}, filled: [], shown: [], stage: '', token: 0, sel: null, tplIdx: 0 };
+
+const theme = id => THEMES.find(t => t.id === id);
+const pickFor = (tid, prev) => {
+  const t = theme(tid), picks = {};
+  for(const [slot, arr] of Object.entries(t.slots)){
+    if(arr.length === 1){ picks[slot] = arr[0]; continue; }
+    const shuffled = [...arr].sort(() => Math.random() - 0.5);
+    const avoid = prev && prev[slot] ? prev[slot] : null;
+    picks[slot] = shuffled.find(w => w !== avoid) || arr[0];
+  }
+  return picks;
+};
+
+/* ---------- 渲染 ---------- */
+const NS = 'http://www.w3.org/2000/svg';
+function el(name, attrs, content, parent){
+  const n = document.createElementNS(NS, name);
+  for(const [k, v] of Object.entries(attrs || {})) n.setAttribute(k, v);
+  if(typeof content === 'string') n.textContent = content;
+  else if(content) content.appendChild(n);
+  if(parent) parent.appendChild(n);
+  return n;
+}
+
+function render(){
+  const svg = $('#graph');
+  svg.innerHTML = '';
+  const defs = el('defs', {}, null, svg);
+  const marker = el('marker', { id:'arrow', viewBox:'0 0 10 10', refX:'8.5', refY:'5', markerWidth:'7', markerHeight:'7', orient:'auto-start-reverse' }, null, defs);
+  el('path', { d:'M0,0L10,5L0,10z', fill:'#3a4152' }, null, marker);
+  const t = theme(state.themeId);
+  const accent = t ? t.color : '#3a4152';
+
+  for(const s of SLOTS){
+    const p = pos(s.id), g = el('g', { class:'node', transform:`translate(${p.x - W/2},${p.y - H/2})`, 'data-id':s.id }, null, svg);
+    const filled = state.filled.includes(s.id);
+    const color = CAT_COLORS[s.cat];
+    g.appendChild(el('rect', { x:0, y:0, width:W, height:H, rx:10, class:filled ? 'bg fill' : 'bg' }));
+    const nm = g.appendChild(el('rect', { x:0, y:0, width:W, height:H, rx:10, class:'nm' }));
+    nm.setAttribute('stroke', filled ? color : '#2a2f3d');
+    if(state.sel === s.id) g.classList.add('sel');
+    if(state.stage === 'loop' && s.id === 'req2') g.classList.add('loop');
+    const t1 = g.appendChild(el('text', { x:10, y:17, class:'cls' }, s.cat + ' · ' + s.type));
+    t1.setAttribute('fill', filled ? color : '#6f788c');
+    g.appendChild(el('text', { x:10, y:40, class:'cnt' }, filled ? state.picks[s.id] : '？待演绎'));
+    g.appendChild(el('text', { x:10, y:61, class:'nid' }, s.id + ' ' + s.label));
+    const outN = EDGES.filter(e => e.from === s.id).length;
+    const out = el('text', { x:W - 10, y:61, class:'nid o', 'text-anchor':'end' }, `出链 ${outN}`);
+    g.appendChild(out);
+    g.addEventListener('click', () => selectNode(s.id));
+  }
+
+  const idOf = e => `${e.from}>${e.to}`;
+  for(const e of EDGES){
+    const a = pos(e.from), b = pos(e.to);
+    const fx = a.x, fy = a.y + H/2, tx = b.x, ty = b.y - H/2;
+    const dx = tx - fx, dy = ty - fy, horiz = Math.abs(dx) > Math.abs(dy);
+    const c1 = horiz ? `${fx + dx*0.45},${fy}` : `${fx},${fy + dy*0.45}`;
+    const c2 = horiz ? `${tx - dx*0.45},${ty}` : `${tx},${ty - dy*0.45}`;
+    const show = state.shown.includes(idOf(e));
+    const path = el('path', { d:`M${fx},${fy} C${c1} ${c2} ${tx},${ty}`, class:show ? 'edge show' : 'edge', 'marker-end':'url(#arrow)', 'data-edge':idOf(e) }, svg);
+    if(show) path.setAttribute('stroke', accent);
+    const mx = (fx + tx) / 2, my = (fy + ty) / 2;
+    const label = el('text', { x:mx, y:my - 6, class:show ? 'edge-label show' : 'edge-label', 'text-anchor':'middle', 'paint-order':'stroke', 'stroke':'#10131a', 'stroke-width':4 }, e.pred, svg);
+    label.setAttribute('fill', show ? '#d7e0f0' : '#767f93');
+  }
+}
+
+function selectNode(id){
+  state.sel = id;
+  const s = SLOT[id], t = theme(state.themeId);
+  const d = $('#detail');
+  const color = CAT_COLORS[s.cat];
+  const content = state.picks[id] || '？';
+  const inEdges = EDGES.filter(e => e.to === id).map(e => `[${SLOT[e.from].type}] ${e.pred} → 这里`).join('<br>') || '（无入链）';
+  const outEdges = EDGES.filter(e => e.from === id).map(e => `这里 ${e.pred} → [${SLOT[e.to].type}]`).join('<br>') || '（无出链 — 触达新需求锚或死端）';
+  d.innerHTML =
+    `<span class="d-name" style="color:${color}">${s.label}</span>` +
+    `<div class="d-type" style="color:${color}">${s.cat} · ${s.type} ｜ ${t ? t.name : '未命中主题'}肌理</div>` +
+    `<div class="d-content">${content}</div>` +
+    `<div class="links"><div><b>入链</b><br>${inEdges}</div>` +
+    `<div style="margin-top:6px"><b>出链</b><br>${outEdges}</div></div>`;
+  render();
+}
+
+/* ---------- 过程 ---------- */
+function renderThemes(){
+  const box = $('#themes');
+  box.innerHTML = '';
+  for(const t of THEMES){
+    const card = document.createElement('div');
+    card.className = 'theme-card' + (state.themeId === t.id ? ' active' : '');
+    const n = Object.values(t.slots).reduce((a, arr) => a + arr.length, 0);
+    card.innerHTML =
+      `<div class="t-name">${t.name}<span class="dot" style="background:${t.color}"></span></div>` +
+      `<div class="t-tag">${t.tagline} ｜ ${t.tone} ｜ 词组 ×${n}</div>`;
+    card.addEventListener('click', () => apply(t.id));
+    box.appendChild(card);
+  }
+  document.documentElement.style.setProperty('--accent', theme(state.themeId) ? theme(state.themeId).color : '#eab308');
+}
+
+function renderWordbank(){
+  const t = theme(state.themeId);
+  if(!t){ $('#wb').innerHTML = ''; return; }
+  let html = '';
+  for(const s of SLOTS){
+    const words = t.slots[s.id];
+    html += `<div class="g"><div class="gl">${s.cat} · ${s.type} <b>（${s.label}）</b></div>` +
+      words.map(w => `<span class="chip">${w}</span>`).join('') + `</div>`;
+  }
+  $('#wb').innerHTML = html;
+}
+
+function logReset(){
+  document.querySelectorAll('#steps li').forEach(li => li.className = '');
+  $('#stepProg').textContent = '';
+}
+function logDone(i){ document.querySelectorAll('#steps li')[i].className = 'done'; }
+function logActive(i){ document.querySelectorAll('#steps li')[i].className = 'active'; }
+function setStatus(stage, extra){
+  const t = theme(state.themeId);
+  $('#status').innerHTML = `主题：<b>${t ? t.name : '–'}</b> ｜ 阶段：${stage}${extra ? ' ｜ ' + extra : ''}`;
+}
+
+function buildJSON(){
+  const t = theme(state.themeId);
+  const r = compose(state.picks);
+  const obj = {
+    meta: { tool: '事件积木·肌理选择器', version: '0.2.0', skeleton: '化缘链 v1（14 节点 / 13 边）', atomModel: '21 原子 · 10 大类' },
+    result: {
+      theme: t.name, tagline: t.tagline, tone: t.tone, story: t.story,
+      recap: { sentence: r.sentence, combos: r.combos, steps: r.steps },
+      nodes: SLOTS.map(s => ({ id: s.id, cat: s.cat, type: s.type, content: state.picks[s.id] })),
+      edges: EDGES.map(e => ({ from: e.from, to: e.to, predicate: e.pred })),
+      loop: { from: 'evt', to: 'req2', via: 'karma', note: '结果回写业力，业力牵引新事件，新需求浮现——链可再生长' }
+    }
+  };
+  return JSON.stringify(obj, null, 2);
+}
+
+function emitJSON(){
+  const json = buildJSON();
+  $('#json').textContent = json;
+  return json;
+}
+
+/* ---------- 组合演绎（{} 可变槽位） ---------- */
+function fillPlain(tpl, picks){
+  return tpl.replace(/\{(\w+)\}/g, (m, id) => picks[id] || '？');
+}
+function fillHtml(tpl, picks){
+  return tpl.replace(/\{(\w+)\}/g, (m, id) =>
+    '<span class="fv" title="' + (SLOT[id] ? SLOT[id].type : id) + '">' + (picks[id] || '？') + '</span>');
+}
+function compose(picks){
+  const t = theme(state.themeId);
+  const tpl = t.templates[state.tplIdx % t.templates.length];
+  return {
+    sentence: fillPlain(tpl, picks),
+    combos: t.combo.map(x => fillPlain(x, picks)),
+    steps: SLOTS.map(s => ({ slot: s.label, cat: s.cat, value: picks[s.id] || '？' }))
+  };
+}
+function renderRecap(){
+  const t = theme(state.themeId);
+  if(!t){ $('#recap').innerHTML = '<div class="hint">未命中主题</div>'; return; }
+  const tpl = t.templates[state.tplIdx % t.templates.length];
+  const r = compose(state.picks);
+  $('#recap').innerHTML =
+    '<div class="r-sentence">' + fillHtml(tpl, state.picks) + '</div>' +
+    '<div class="r-combos">' + t.combo.map(x => '<span class="r-combo">' + fillHtml(x, state.picks) + '</span>').join('') + '</div>' +
+    '<ol class="r-steps">' + r.steps.map(s => '<li><b>' + s.slot + '</b>：' + s.value + '</li>').join('') + '</ol>';
+}
+
+/* ---------- 动画流程 ---------- */
+async function apply(tid, animate = true){
+  state.token++;
+  const my = state.token;
+  if(!animate){
+    state.themeId = tid;
+    state.picks = pickFor(tid, state.picks);
+    state.filled = [...ORDER];
+    state.shown = EDGES.map(e => `${e.from}>${e.to}`);
+    state.stage = 'loop';
+    selectNode(state.sel = state.sel || 'req');
+    renderThemes(); renderWordbank(); renderRecap();
+    const json = emitJSON();
+    setStatus('回环就绪', '槽位 14/14');
+    $('#stepProg').textContent = `已应用主题「${theme(tid).name}」，共 ${Object.keys(json).length} 键结构体。`;
+    return;
+  }
+  state.themeId = tid;
+  state.picks = pickFor(tid, state.picks);
+  state.filled = []; state.shown = []; state.stage = 'skeleton';
+  logReset(); renderThemes(); renderWordbank();
+  setStatus('骨架', '14 节点 · 13 边');
+  render();
+  logActive(0); $('#stepProg').textContent = `原型骨架「化缘链 v1」就绪：${SLOTS.length} 节点 / ${EDGES.length} 边，全部槽位待演绎。`;
+  await sleep(650);
+  if(my !== state.token) return;
+
+  logDone(0); logActive(1);
+  state.stage = 'theme';
+  setStatus('命中主题', theme(tid).name);
+  $('#stepProg').textContent = `命中主题「${theme(tid).name}」：载入 ${Object.values(theme(tid).slots).reduce((a, x) => a + x.length, 0)} 条演绎词组，标签「${theme(tid).tagline}」，基调 ${theme(tid).tone}。`;
+  render();
+  await sleep(600);
+  if(my !== state.token) return;
+
+  logDone(1); logActive(2);
+  state.stage = 'filling';
+  $('#stepProg').textContent = '逐槽演绎：';
+  for(const id of ORDER){
+    state.filled.push(id);
+    const okEdges = EDGES.filter(e => state.filled.includes(e.from) && state.filled.includes(e.to)).map(e => `${e.from}>${e.to}`);
+    state.shown = okEdges;
+    setStatus('演绎填充', `${state.filled.length}/${ORDER.length}`);
+    $('#stepProg').textContent = `逐槽演绎：${SLOT[id].cat}·${SLOT[id].type} ← «${state.picks[id]}»`;
+    render();
+    await sleep(110);
+    if(my !== state.token) return;
+  }
+
+  logDone(2); logActive(3);
+  state.stage = 'loop';
+  setStatus('回环就绪', '槽位 14/14');
+  $('#stepProg').textContent = '回环就绪：结果 → 业力 → 事件 → 新需求浮现，链可再生长。结构体与任务合述已导出。';
+  render();
+  emitJSON();
+  renderRecap();
+  await sleep(400);
+  if(my !== state.token) return;
+  logDone(3);
+}
+
+function reroll(){
+  if(!state.themeId) return;
+  state.picks = pickFor(state.themeId, { ...state.picks });
+  state.filled = [...ORDER];
+  state.shown = EDGES.map(e => `${e.from}>${e.to}`);
+  state.stage = 'loop';
+  state.tplIdx++;
+  render(); emitJSON(); renderRecap();
+  $('#stepProg').textContent = `🔀 在「${theme(state.themeId).name}」肌理内换了一套演绎词组与组合句（14 槽位重抽）。`;
+  if(state.sel) selectNode(state.sel);
+}
+
+/* ---------- 事件 ---------- */
+$('#btnDice').addEventListener('click', () => {
+  const others = THEMES.filter(t => t.id !== state.themeId);
+  apply(others[Math.floor(Math.random() * others.length)].id);
+});
+$('#btnReroll').addEventListener('click', reroll);
+$('#btnPlay').addEventListener('click', () => state.themeId && apply(state.themeId));
+$('#btnCopy').addEventListener('click', doCopy);
+$('#btnCopy2').addEventListener('click', doCopy);
+$('#btnDl').addEventListener('click', doDownload);
+$('#btnDl2').addEventListener('click', doDownload);
+
+function doCopy(){
+  const json = buildJSON();
+  const done = () => { $('#btnCopy').textContent = '已复制 ✓'; $('#btnCopy2').textContent = '已复制 ✓'; setTimeout(() => { $('#btnCopy').textContent = '⧉ 复制结构'; $('#btnCopy2').textContent = '⧉ 复制'; }, 1200); };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(json).then(done, () => fallbackCopy(json, done));
+  } else fallbackCopy(json, done);
+}
+function fallbackCopy(text, done){
+  const ta = document.createElement('textarea');
+  ta.value = text; document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); }catch(e){}
+  document.body.removeChild(ta); done();
+}
+function doDownload(){
+  const t = theme(state.themeId);
+  const blob = new Blob([buildJSON()], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `theme-${t ? t.name : 'none'}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/* ---------- 启动 ---------- */
+apply(THEMES[0].id);
+</script>
+</body>
+</html>
