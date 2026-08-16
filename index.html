@@ -78,6 +78,10 @@ svg#graph{ width:100%; height:100%; background:#10131a; border-radius:10px; bord
 .r-steps li{ counter-increment:rs; margin:2px 0; color:#9aa4bd; }
 .r-steps li::before{ content:counter(rs); display:inline-block; width:15px; height:15px; border-radius:50%; background:#1d2130; color:#7b8496; font-size:10px; text-align:center; line-height:15px; margin-right:6px; }
 .r-steps b{ color:#d7e0f0; }
+.r-sub{ font-size:11px; color:#7b8496; margin:4px 0 8px; }
+.r-h{ font-size:11px; color:#8b93a7; margin:10px 0 4px; letter-spacing:1px; }
+.r-pred{ color:var(--accent); font-size:11px; padding:0 4px; }
+.r-tag{ color:#6b7385; font-size:10px; }
 #jsonWrap{ display:flex; flex-direction:column; height:100%; }
 #jsonBtns{ display:flex; gap:8px; margin-bottom:8px; }
 pre#json{ flex:1; background:#0b0d12; border:1px solid #23262e; border-radius:10px; padding:10px; font-size:11px; line-height:1.5; font-family:Consolas,"Courier New",monospace; color:#b8c4e0; overflow:auto; margin:0; white-space:pre; }
@@ -400,7 +404,7 @@ const W = 170, H = 72;
 function chainPos(i, total){
   const row = Math.floor(i / 5), col = i % 5;
   const xc = (row % 2 === 1) ? (4 - col) : col;
-  return { x: 70 + xc * 200, y: 115 + row * 255 };
+  return { x: 90 + xc * 200, y: 115 + row * 255 };
 }
 
 /* ---------- 状态 ---------- */
@@ -595,33 +599,98 @@ function setStatus(stage, extra){
   $('#status').innerHTML = `${m} ｜ 主题：<b>${t ? t.name : '–'}</b> ｜ 阶段：${stage}${extra ? ' ｜ ' + extra : ''}`;
 }
 
-/* ---------- 组合演绎（{} 槽位） ---------- */
-function fillPlain(tpl, picks){
-  return tpl.replace(/\{(\w+)\}/g, (m, id) => picks[id] || '？');
+/* ---------- 任务合述（{预留字} 正则替换 · 由节点统一生成） ---------- */
+const TYPE_TOKEN = {
+  '意义·需求':'需求', '属性·环境':'环境', '实体·人物':'人物', '实体·物品':'物品', '实体·地点':'地点',
+  '属性·数量':'数量', '属性·时间':'时间', '约束·限制':'限制', '属性·能力':'能力', '关系·动作':'动作',
+  '选择·道德选择':'选择', '意义·结果':'结果', '因果·业力':'业力', '实体·事件':'事件'
+};
+const GENERIC_TEMPLATES = [
+  '为{需求}，于{环境}遇{人物}，其处{地点}，持有{物品}{数量}；须在{时间}{动作}，守{限制}，凭{能力}成事。临{选择}之择：成则{结果}、{业力}；{事件}后，新{需求}又起。',
+  '{需求}：{人物}困于{环境}，留于{地点}，需{物品}{数量}；限{时间}，凭{能力}{动作}，守{限制}；行至{选择}，得{结果}，{业力}随之；{事件}，再起{需求}。',
+  '{环境}之中，{人物}之{需求}未解；取{物品}{数量}，{时间}{动作}（{限制}）。{选择}一念，成{结果}、积{业力}；{事件}毕，又生{需求}。'
+];
+const TOKEN_RE = /\{(需求|环境|人物|物品|地点|数量|时间|限制|能力|动作|选择|结果|业力|事件)\}/g;
+
+function queueByToken(){
+  const q = {};
+  for(const n of state.chain){
+    const tk = TYPE_TOKEN[n.type];
+    if(tk) (q[tk] = q[tk] || []).push(n.content);
+  }
+  return q;
 }
-function fillHtml(tpl, picks){
-  return tpl.replace(/\{(\w+)\}/g, (m, id) =>
-    '<span class="fv" title="' + (SLOT[id] ? SLOT[id].type : id) + '">' + (picks[id] || '？') + '</span>');
+function cleanText(s, mc, tplIdx){
+  const miss = tk => !!mc[tk];
+  const isT2 = tplIdx % 3 === 1;
+  s = s.replace(/\s{2,}/g, ' ');
+  if(miss('环境')){
+    s = miss('人物') ? s.replace(/于遇/g, '') : s.replace(/于遇/g, '遇');
+    s = s.replace(/^之中[，、]?/, '');
+  }
+  if(miss('人物')){ s = s.replace(/遇[，、；]/g, ''); s = s.replace(/^之/, ''); }
+  if(miss('物品')) s = s.replace(/持有[，、；]?/g, '');
+  if(miss('物品') && miss('数量')) s = s.replace(/取[，、]/, '取');
+  if(miss('地点')){ s = s.replace(/其处[，、]/g, '其'); s = s.replace(/留于[，、；]?/g, ''); }
+  if(miss('事件')){ s = s.replace(/^后[，、]?/, ''); s = s.replace(/毕[，、；，]/g, ''); s = s.replace(/毕$/, ''); }
+  if(miss('选择')){ s = s.replace(/临之择/, ''); s = s.replace(/临[，、]?一念[，、]?/g, ''); s = s.replace(/行至[，、；]?/g, ''); s = s.replace(/：/g, ''); }
+  if(miss('时间')) s = s.replace(/限[，、；]?/g, '');
+  if(isT2 && miss('能力')) s = s.replace(/凭/, '');
+  if(mc['需求'] === 1) s = s.replace(/^为[，、；]?/, '');
+  if(mc['需求'] >= 2) s = s.replace(/毕。$/, '。');
+  s = s.replace(/新[，、]?又起/g, '');
+  s = s.replace(/又生(?=[，。；]|$)/g, '');
+  s = s.replace(/再起(?=[，。；]|$)/g, '');
+  if(miss('时间') && miss('动作')) s = s.replace(/须在[，、]?/, '');
+  if(miss('限制')) s = s.replace(/守[，、；]/g, '');
+  if(miss('能力')) s = s.replace(/凭成事/, '成事');
+  s = s.replace(/[，、；]{2,}/g, m => m[0]);
+  s = s.replace(/[，、；]([。；])/g, '$1');
+  s = s.replace(/（[，、；。]*）/g, '');
+  s = s.replace(/^[，、；。：]+/g, '').replace(/[，、；]+$/g, '');
+  s = s.replace(/([。；，、])\s*$/g, '。').replace(/。+/g, '。');
+  if(!/。$/.test(s)) s += '。';
+  return s;
+}
+function buildSentencePlain(){
+  const q = queueByToken();
+  const mc = {};
+  const i = state.tplIdx;
+  const tpl = GENERIC_TEMPLATES[i % GENERIC_TEMPLATES.length];
+  const out = tpl.replace(TOKEN_RE, (m, tk) => {
+    const v = (q[tk] || []).shift();
+    if(!v) mc[tk] = (mc[tk] || 0) + 1;
+    return v || '';
+  });
+  return cleanText(out, mc, i);
+}
+function escRe(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+function buildSentenceHtml(){
+  let s = buildSentencePlain();
+  for(const n of state.chain){
+    if(!n.content) continue;
+    const m = s.indexOf(n.content);
+    if(m < 0) continue;
+    s = s.slice(0, m) + '<span class="fv" title="' + (TYPE_TOKEN[n.type] || n.type) + '">' + n.content + '</span>' + s.slice(m + n.content.length);
+  }
+  return s;
 }
 function renderRecap(){
   const t = theme(state.themeId);
   if(!t){ $('#recap').innerHTML = '<div class="hint">未命中主题</div>'; return; }
-  if(state.mode === 'roam'){
-    const sentence = state.chain.map(n => n.content).join('　→　');
-    const reopened = state.chain[state.chain.length - 1];
-    $('#recap').innerHTML =
-      '<div class="r-sentence">' + sentence + '</div>' +
-      '<div class="r-combos">' + state.roamLog.map(l => '<span class="r-combo">' + l + '</span>').join('') + '</div>' +
-      '<ol class="r-steps">' + state.chain.map((n, i) => '<li><b>' + n.label + '</b>：' + n.content + '</li>').join('') + '</ol>' +
-      (reopened && reopened.type === '意义·需求' ? '<div class="hint" style="margin-top:6px">回环完成：链尾再生新需求「' + reopened.content + '」，任务链可持续生长</div>' : '');
-  } else {
-    const tpl = t.templates[state.tplIdx % t.templates.length];
-    const picks = Object.fromEntries(state.chain.map(n => [n.id, n.content]));
-    $('#recap').innerHTML =
-      '<div class="r-sentence">' + fillHtml(tpl, picks) + '</div>' +
-      '<div class="r-combos">' + t.combo.map(x => '<span class="r-combo">' + fillHtml(x, picks) + '</span>').join('') + '</div>' +
-      '<ol class="r-steps">' + state.chain.map((n, i) => '<li><b>' + n.label + '</b>：' + n.content + '</li>').join('') + '</ol>';
-  }
+  const reopened = state.chain[state.chain.length - 1];
+  const looped = reopened && reopened.type === '意义·需求';
+  const edgeLines = state.edges.map(e => {
+    const a = nodeById(e.from), b = nodeById(e.to);
+    return '<li><b>' + (a ? a.content : e.from) + '</b><span class="r-pred">' + e.pred + '</span><b>' + (b ? b.content : e.to) + '</b></li>';
+  }).join('');
+  const nodeLines = state.chain.map(n => '<li><b>' + n.label + '</b>：' + n.content + ' <span class="r-tag">' + n.type + '</span></li>').join('');
+  $('#recap').innerHTML =
+    '<div class="r-sentence">' + buildSentenceHtml() + '</div>' +
+    '<div class="r-sub">合述模板 T' + (state.tplIdx % GENERIC_TEMPLATES.length + 1) + ' ｜ {预留字} 正则替换，缺失槽位自动清理</div>' +
+    '<h3 class="r-h">链式经过（节点 —谓词→ 节点）</h3><ol class="r-steps">' + edgeLines + '</ol>' +
+    '<h3 class="r-h">节点清单</h3><ol class="r-steps">' + nodeLines + '</ol>' +
+    (looped ? '<div class="hint" style="margin-top:6px">回环完成：链尾再生新需求「' + reopened.content + '」，任务链可持续生长</div>' : '');
 }
 
 /* ---------- 结构体 ---------- */
@@ -629,14 +698,24 @@ function buildJSON(){
   const t = theme(state.themeId);
   const reopened = state.chain[state.chain.length - 1];
   const obj = {
-    meta: { tool: '事件积木·肌理选择器', version: '0.3.0', mode: state.mode === 'roam' ? '随机漫游（逆序构建）' : '固定骨架示范',
+    meta: { tool: '事件积木·肌理选择器', version: '0.3.1', mode: state.mode === 'roam' ? '随机漫游（逆序构建）' : '固定骨架示范',
             generation: '后置决定前置 · 缘起结构（此有故彼有）', atomModel: '21 原子 · 10 大类' },
     result: {
       theme: t.name, tagline: t.tagline, tone: t.tone, story: t.story,
       nodes: state.chain.map(n => ({ id: n.id, cat: n.cat, type: n.type, content: n.content })),
-      edges: state.edges.map(e => ({ from: e.from, to: e.to, predicate: e.pred })),
+      edges: state.edges.map(e => ({
+        from: e.from, fromContent: (nodeById(e.from) || {}).content || null,
+        predicate: e.pred,
+        to: e.to, toContent: (nodeById(e.to) || {}).content || null
+      })),
       recap: {
-        sentence: state.chain.map(n => n.content).join(' → '),
+        template: 'T' + (state.tplIdx % GENERIC_TEMPLATES.length + 1),
+        sentence: buildSentencePlain(),
+        edges: state.edges.map(e => ({
+          from: (nodeById(e.from) || {}).content || e.from,
+          predicate: e.pred,
+          to: (nodeById(e.to) || {}).content || e.to
+        })),
         steps: state.chain.map(n => ({ slot: n.label, type: n.type, value: n.content })),
         roamLog: state.roamLog
       },
