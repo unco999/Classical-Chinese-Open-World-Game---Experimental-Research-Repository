@@ -719,13 +719,13 @@ function cleanText(s, mc, tplIdx){
   if(miss('地点')){ s = s.replace(/其处[，、]/g, '其'); s = s.replace(/留于[，、；]?/g, ''); s = s.replace(/探至[，、。；]?/g, ''); }
   if(miss('事件')){ s = s.replace(/^后[，、]?/, ''); s = s.replace(/毕[，、；，]/g, ''); s = s.replace(/毕$/, ''); }
   if(miss('选择')){ s = s.replace(/临之择/, ''); s = s.replace(/临[，、]?一念[，、]?/g, ''); s = s.replace(/行至[，、；]?/g, ''); s = s.replace(/：/g, ''); }
-  if(miss('时间')) s = s.replace(/限[，、；]?/g, '');
+  if(miss('时间')) s = s.replace(/限(?=[，、；。])/g, '');
   if(miss('组织')) s = s.replace(/托之势[，、；]?|托之助[，、；]?/g, '');
-  if(miss('线索')) s = s.replace(/闻(之传|而进)?[，、；]?/g, '');
+  if(miss('线索')) s = s.replace(/闻(之传|而进)?(?=[，。；])/g, '');
   if(miss('怪异')) s = s.replace(/而遁于暗处[，。]?|窥伺其侧[，、；]?|而环伺[，。；]?/g, '');
-  if(miss('障碍')) s = s.replace(/破[，、；]?|与相周旋[，、；]?/g, '');
-  if(miss('状态')) s = s.replace(/携而行[，、；]?/g, '').replace(/带[，、；]?|落[，、；]?|携[，、；]?/g, '');
-  if(miss('代价')) s = s.replace(/付以偿[，、；]?/g, '').replace(/付[，、；。]?/g, '');
+  if(miss('障碍')) s = s.replace(/破(?=[，、；。])|与相周旋(?=[，、；])/g, '');
+  if(miss('状态')) s = s.replace(/携而行[，、；]?/g, '').replace(/带(?=[，、；])|落(?=[，、；])|携(?=[，、；])/g, '');
+  if(miss('代价')) s = s.replace(/付以偿[，、；]?/g, '').replace(/付(?=[，、。；])/g, '');
   if(isT2 && miss('能力')) s = s.replace(/凭/, '');
   if(tplIdx % 3 === 2 && miss('能力')) s = s.replace(/凭(?=[^，。；])/, '');
   if(missSlot('需求', 1)) s = s.replace(/^为[，、；]?/, '');
@@ -746,12 +746,13 @@ function cleanText(s, mc, tplIdx){
 }
 function buildSentencePlain(){
   const q = queueByToken();
-  const mc = {};
+  const mc = {}, occ = {};
   const i = state.tplIdx;
   const tpl = GENERIC_TEMPLATES[i % GENERIC_TEMPLATES.length];
   const out = tpl.replace(TOKEN_RE, (m, tk) => {
+    occ[tk] = (occ[tk] || 0) + 1;
     const v = (q[tk] || []).shift();
-    if(!v) (mc[tk] = mc[tk] || []).push((mc[tk].length || 0) + 1);
+    if(!v) (mc[tk] = mc[tk] || []).push(occ[tk]);
     return v || '';
   });
   return cleanText(out, mc, i);
