@@ -34,6 +34,7 @@ summary{ cursor:pointer; font-size:12px; color:#b8c4e0; }
 .wb .g .gl{ font-size:11px; color:#7b8496; margin-bottom:3px; }
 .wb .g .gl b{ color:#9aa4bd; }
 .chip{ display:inline-block; font-size:11px; padding:2px 7px; margin:1px 2px; border-radius:6px; background:#1d2130; color:#c7cbe0; border:1px solid #2a2f3d; }
+.wb .g .sem{ font-size:10px; color:#6b7385; margin-top:2px; }
 #detail{ border:1px solid #23262e; border-radius:10px; background:#14171f; padding:10px; font-size:12px; }
 #detail .hint{ color:#7b8496; }
 #detail .d-name{ font-size:14px; font-weight:600; }
@@ -110,7 +111,7 @@ pre#json{ flex:1; background:#0b0d12; border:1px solid #23262e; border-radius:10
     </section>
     <section>
       <h2>槽位词库（演绎词组）</h2>
-      <details id="wordbank"><summary>展开 14 个槽位</summary><div class="wb" id="wb"></div></details>
+      <details id="wordbank"><summary>展开 20 个槽位</summary><div class="wb" id="wb"></div></details>
     </section>
     <section>
       <h2>节点详情</h2>
@@ -147,20 +148,26 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const CAT_COLORS = { 实体:'#3b82f6', 属性:'#eab308', 关系:'#a855f7', 约束:'#ef4444', 意义:'#22c55e', 因果:'#f59e0b', 选择:'#ec4899' };
 
 const SLOTS = [
-  {id:'req',   cat:'意义', type:'意义·需求',   label:'需求节点'},
-  {id:'env',   cat:'属性', type:'属性·环境',   label:'环境节点'},
-  {id:'npc',   cat:'实体', type:'实体·人物',   label:'人物节点'},
-  {id:'item',  cat:'实体', type:'实体·物品',   label:'物品节点'},
-  {id:'loc',   cat:'实体', type:'实体·地点',   label:'地点节点'},
-  {id:'cnt',   cat:'属性', type:'属性·数量',   label:'数量节点'},
-  {id:'time',  cat:'属性', type:'属性·时间',   label:'时间节点'},
-  {id:'limit', cat:'约束', type:'约束·限制',   label:'限制节点'},
-  {id:'skill', cat:'属性', type:'属性·能力',   label:'能力节点'},
-  {id:'act',   cat:'关系', type:'关系·动作',   label:'动作节点'},
-  {id:'choice',cat:'选择', type:'选择·道德选择',label:'选择节点'},
-  {id:'res',   cat:'意义', type:'意义·结果',   label:'结果节点'},
-  {id:'karma', cat:'因果', type:'因果·业力',   label:'业力节点'},
-  {id:'evt',   cat:'实体', type:'实体·事件',   label:'事件节点'}
+  {id:'req',   cat:'意义', type:'意义·需求',   label:'需求节点',   semantic:'主体缺失与动机（唯一的“缺口”）'},
+  {id:'env',   cat:'属性', type:'属性·环境',   label:'环境节点',   semantic:'外部境况（时空·气象·时局）'},
+  {id:'npc',   cat:'实体', type:'实体·人物',   label:'人物节点',   semantic:'人类个体行动主体'},
+  {id:'org',   cat:'实体', type:'实体·组织',   label:'势力节点',   semantic:'集体行动主体（宗门·帮派·官府）'},
+  {id:'item',  cat:'实体', type:'实体·物品',   label:'物品节点',   semantic:'物质载体'},
+  {id:'clue',  cat:'实体', type:'实体·讯息',   label:'线索节点',   semantic:'信息载体（传言·密信·卦象）'},
+  {id:'weird', cat:'实体', type:'实体·异类',   label:'异类节点',   semantic:'非人行动主体（妖·鬼·山精）'},
+  {id:'loc',   cat:'实体', type:'实体·地点',   label:'地点节点',   semantic:'空间场所'},
+  {id:'cnt',   cat:'属性', type:'属性·数量',   label:'数量节点',   semantic:'度量（唯一记量者）'},
+  {id:'time',  cat:'属性', type:'属性·时间',   label:'时间节点',   semantic:'时点/时段约束'},
+  {id:'limit', cat:'约束', type:'约束·限制',   label:'限制节点',   semantic:'禁令类规范（不可如何）'},
+  {id:'obs',   cat:'实体', type:'实体·障碍',   label:'障碍节点',   semantic:'待克服的客体难关（险阻·封锁·阵势）'},
+  {id:'skill', cat:'属性', type:'属性·能力',   label:'能力节点',   semantic:'主体资本与技法'},
+  {id:'sta',   cat:'属性', type:'属性·状态',   label:'状态节点',   semantic:'主体自身内况（伤病·惊惧·虚弱）'},
+  {id:'act',   cat:'关系', type:'关系·动作',   label:'动作节点',   semantic:'行为本身'},
+  {id:'choice',cat:'选择', type:'选择·道德选择',label:'选择节点',   semantic:'取舍分歧点'},
+  {id:'res',   cat:'意义', type:'意义·结果',   label:'结果节点',   semantic:'所得（正收益）'},
+  {id:'cst',   cat:'因果', type:'因果·代价',   label:'代价节点',   semantic:'所失（折寿·破财·断指）'},
+  {id:'karma', cat:'因果', type:'因果·业力',   label:'业力节点',   semantic:'因果记账系统（善恶数值，非得失本身）'},
+  {id:'evt',   cat:'实体', type:'实体·事件',   label:'事件节点',   semantic:'已然的世界性变化'}
 ];
 const SLOT = Object.fromEntries(SLOTS.map(s => [s.id, s]));
 const LABEL = s => (Object.fromEntries(SLOTS.map(x => [x.type, x.label])))[s];
@@ -168,35 +175,48 @@ const LABEL = s => (Object.fromEntries(SLOTS.map(x => [x.type, x.label])))[s];
 const EDGES = [
   {from:'req',   to:'env',    pred:'需要当前环境是'},
   {from:'env',   to:'npc',    pred:'此环境下'},
-  {from:'npc',   to:'item',   pred:'持有'},
+  {from:'npc',   to:'org',    pred:'从属'},
+  {from:'org',   to:'item',   pred:'库藏'},
   {from:'item',  to:'cnt',    pred:'需'},
   {from:'cnt',   to:'time',   pred:'须在…之前'},
   {from:'time',  to:'limit',  pred:'须守'},
-  {from:'limit', to:'act',    pred:'约束'},
+  {from:'limit', to:'skill',  pred:'非此不成'},
   {from:'skill', to:'act',    pred:'凭此方能'},
-  {from:'act',   to:'choice', pred:'或'},
-  {from:'choice',to:'res',    pred:'则'},
+  {from:'act',   to:'obs',    pred:'受阻于'},
+  {from:'obs',   to:'clue',   pred:'显露于'},
+  {from:'clue',  to:'choice', pred:'引向'},
+  {from:'choice',to:'cst',    pred:'付出'},
+  {from:'cst',   to:'res',    pred:'换得'},
   {from:'res',   to:'karma',  pred:'回写'},
-  {from:'karma', to:'evt',    pred:'牵引'},
-  {from:'evt',   to:'req',    pred:'生 · 新需求浮现'}
+  {from:'karma', to:'weird',  pred:'感召'},
+  {from:'weird', to:'evt',    pred:'招致'},
+  {from:'evt',   to:'sta',    pred:'使得'},
+  {from:'sta',   to:'loc',    pred:'困于'},
+  {from:'loc',   to:'req',    pred:'逼出 · 新需求浮现'}
 ];
 
 /* 可链接类型表（分类器·出链） */
 const LINK = {
-  '意义·需求':   ['属性·环境','实体·物品','实体·人物','实体·地点','属性·数量','属性·时间','属性·能力','关系·动作'],
-  '属性·环境':   ['实体·人物','关系·动作','约束·限制'],
-  '实体·人物':   ['实体·物品','实体·地点','意义·需求','属性·时间','属性·环境','因果·业力'],
+  '意义·需求':   ['属性·环境','实体·物品','实体·人物','实体·地点','属性·数量','属性·时间','属性·能力','关系·动作','实体·组织','实体·讯息','实体·障碍','属性·状态','因果·代价'],
+  '属性·环境':   ['实体·人物','关系·动作','约束·限制','实体·障碍','实体·异类'],
+  '实体·人物':   ['实体·物品','实体·地点','意义·需求','属性·时间','属性·环境','因果·业力','实体·组织','实体·讯息','实体·障碍','属性·状态','实体·异类'],
+  '实体·组织':   ['实体·人物','实体·地点','实体·事件','意义·需求','意义·结果'],
   '实体·物品':   ['实体·人物','实体·地点','属性·数量','意义·需求'],
-  '实体·地点':   ['实体·人物','实体·物品','实体·事件','属性·环境','选择·道德选择'],
+  '实体·讯息':   ['实体·人物','实体·地点','实体·事件','关系·动作','属性·环境'],
+  '实体·异类':   ['属性·环境','实体·人物','属性·能力','实体·事件','属性·状态'],
+  '实体·地点':   ['实体·人物','实体·物品','实体·事件','属性·环境','选择·道德选择','实体·组织','实体·讯息','实体·异类','实体·障碍'],
   '属性·数量':   ['实体·物品','意义·需求','因果·业力'],
-  '属性·时间':   ['实体·事件','意义·需求','约束·限制'],
-  '约束·限制':   ['关系·动作','实体·人物','实体·地点'],
-  '属性·能力':   ['关系·动作'],
-  '关系·动作':   ['选择·道德选择','意义·结果','实体·人物','实体·物品'],
-  '选择·道德选择':['意义·结果','因果·业力','意义·需求'],
-  '意义·结果':   ['因果·业力','实体·事件','实体·物品','意义·需求'],
-  '因果·业力':   ['实体·事件','意义·需求'],
-  '实体·事件':   ['意义·结果','意义·需求']
+  '属性·时间':   ['实体·事件','意义·需求','约束·限制','属性·状态','实体·异类'],
+  '约束·限制':   ['关系·动作','实体·人物','实体·地点','实体·障碍'],
+  '实体·障碍':   ['实体·人物','实体·地点','意义·结果','关系·动作','意义·需求'],
+  '属性·能力':   ['关系·动作','实体·障碍'],
+  '属性·状态':   ['关系·动作','属性·能力','意义·需求','因果·业力'],
+  '关系·动作':   ['选择·道德选择','意义·结果','实体·人物','实体·物品','实体·障碍','实体·讯息','因果·代价'],
+  '选择·道德选择':['意义·结果','因果·业力','意义·需求','因果·代价','属性·状态'],
+  '意义·结果':   ['因果·业力','实体·事件','实体·物品','意义·需求','因果·代价'],
+  '因果·代价':   ['意义·结果','因果·业力','实体·事件','意义·需求'],
+  '因果·业力':   ['实体·事件','意义·需求','因果·代价','实体·异类'],
+  '实体·事件':   ['意义·结果','意义·需求','实体·异类','属性·状态']
 };
 
 /* 谓词表（fromType>toType） */
@@ -204,22 +224,47 @@ const PRED = {
   '意义·需求>属性·环境':'需要当前环境是', '意义·需求>实体·物品':'需要', '意义·需求>实体·人物':'需要相助',
   '意义·需求>实体·地点':'需要抵达', '意义·需求>属性·数量':'需要', '意义·需求>属性·时间':'须在',
   '意义·需求>属性·能力':'需要具备', '意义·需求>关系·动作':'需要行',
+  '意义·需求>实体·组织':'要借', '意义·需求>实体·讯息':'要寻', '意义·需求>实体·障碍':'须破',
+  '意义·需求>属性·状态':'顾念', '意义·需求>因果·代价':'愿付',
   '属性·环境>实体·人物':'此环境下', '属性·环境>关系·动作':'在其中', '属性·环境>约束·限制':'须避',
+  '属性·环境>实体·障碍':'藏着', '属性·环境>实体·异类':'呼应',
   '实体·人物>实体·物品':'持有', '实体·人物>实体·地点':'居于', '实体·人物>意义·需求':'有心愿',
   '实体·人物>属性·时间':'在…时在场', '实体·人物>属性·环境':'困于', '实体·人物>因果·业力':'背着',
+  '实体·人物>实体·组织':'从属', '实体·人物>实体·讯息':'散布', '实体·人物>实体·障碍':'直面',
+  '实体·人物>属性·状态':'身负', '实体·人物>实体·异类':'遭遇',
+  '实体·组织>实体·人物':'纳为门人', '实体·组织>实体·地点':'盘踞', '实体·组织>实体·事件':'发动',
+  '实体·组织>意义·需求':'立下', '实体·组织>意义·结果':'理应',
   '实体·物品>实体·人物':'由…所持', '实体·物品>实体·地点':'存放于', '实体·物品>属性·数量':'需',
   '实体·物品>意义·需求':'是所需',
+  '实体·讯息>实体·人物':'关乎', '实体·讯息>实体·地点':'藏在', '实体·讯息>实体·事件':'预告',
+  '实体·讯息>关系·动作':'传出', '实体·讯息>属性·环境':'传于',
+  '实体·异类>属性·环境':'栖息', '实体·异类>实体·人物':'蛊惑', '实体·异类>属性·能力':'擅长',
+  '实体·异类>实体·事件':'招致', '实体·异类>属性·状态':'带来',
   '实体·地点>实体·人物':'在此地', '实体·地点>实体·物品':'藏有', '实体·地点>实体·事件':'将发生',
   '实体·地点>属性·环境':'当下', '实体·地点>选择·道德选择':'是分歧点',
+  '实体·地点>实体·组织':'盘踞', '实体·地点>实体·讯息':'秘藏', '实体·地点>实体·异类':'窝藏',
+  '实体·地点>实体·障碍':'横于',
   '属性·数量>实体·物品':'份', '属性·数量>意义·需求':'量为', '属性·数量>因果·业力':'增',
   '属性·时间>实体·事件':'定于', '属性·时间>意义·需求':'须在', '属性·时间>约束·限制':'限',
+  '属性·时间>属性·状态':'时逢', '属性·时间>实体·异类':'入夜则现',
   '约束·限制>关系·动作':'约束', '约束·限制>实体·人物':'不与', '约束·限制>实体·地点':'不入',
-  '属性·能力>关系·动作':'凭此方能',
+  '约束·限制>实体·障碍':'绕开',
+  '实体·障碍>实体·人物':'困住', '实体·障碍>实体·地点':'横于', '实体·障碍>意义·结果':'扫则',
+  '实体·障碍>关系·动作':'迫使', '实体·障碍>意义·需求':'催生',
+  '属性·能力>关系·动作':'凭此方能', '属性·能力>实体·障碍':'破解',
+  '属性·状态>关系·动作':'勉强', '属性·状态>属性·能力':'折损', '属性·状态>意义·需求':'激起',
+  '属性·状态>因果·业力':'记下',
   '关系·动作>选择·道德选择':'或', '关系·动作>意义·结果':'则', '关系·动作>实体·人物':'对', '关系·动作>实体·物品':'用',
+  '关系·动作>实体·障碍':'闯过', '关系·动作>实体·讯息':'查验', '关系·动作>因果·代价':'耗费',
   '选择·道德选择>意义·结果':'则', '选择·道德选择>因果·业力':'改', '选择·道德选择>意义·需求':'牵出',
+  '选择·道德选择>因果·代价':'付出', '选择·道德选择>属性·状态':'牵动',
   '意义·结果>因果·业力':'回写', '意义·结果>实体·事件':'之后', '意义·结果>实体·物品':'获得', '意义·结果>意义·需求':'浮现新',
+  '意义·结果>因果·代价':'偿清',
+  '因果·代价>意义·结果':'换得', '因果·代价>因果·业力':'记入', '因果·代价>实体·事件':'淹及', '因果·代价>意义·需求':'沉为',
   '因果·业力>实体·事件':'牵引', '因果·业力>意义·需求':'生',
-  '实体·事件>意义·结果':'导致', '实体·事件>意义·需求':'后生'
+  '因果·业力>因果·代价':'折抵', '因果·业力>实体·异类':'感召',
+  '实体·事件>意义·结果':'导致', '实体·事件>意义·需求':'后生',
+  '实体·事件>实体·异类':'惹出', '实体·事件>属性·状态':'使人'
 };
 const predOf = (a, b) => PRED[a.type + '>' + b.type] || '→';
 
@@ -256,8 +301,14 @@ const THEMES = [
       {id:'rs2',   type:'意义·结果',   words:['施主欢喜']},
       {id:'km1',   type:'因果·业力',   words:['业障-1']},
       {id:'km2',   type:'因果·业力',   words:['善缘+1']},
-      {id:'ev1',   type:'实体·事件',   words:['布施者渐多','邻坊相馈']},
-      {id:'ev2',   type:'实体·事件',   words:['寺门香火转盛']}
+{id:'ev1',   type:'实体·事件',   words:['布施者渐多','邻坊相馈']},
+      {id:'ev2',   type:'实体·事件',   words:['寺门香火转盛']},
+      {id:'og1',   type:'实体·组织',   words:['香火堂口','施粥善堂']},
+      {id:'cl1',   type:'实体·讯息',   words:['乡民口传','贵人请帖']},
+      {id:'wd1',   type:'实体·异类',   words:['雪夜山精','井台河伯']},
+      {id:'ob1',   type:'实体·障碍',   words:['冰封山路','饿犬围门']},
+      {id:'st1',   type:'属性·状态',   words:['腹馁虚乏','病倒在榻']},
+      {id:'cs1',   type:'因果·代价',   words:['半钵口粮','佛前罚偈']}
     ],
     combo:['在{env}中{act}', '向{npc}求得{cnt}，须在{time}{act}', '{res}随布施而来', '{evt}后生{req2}'],
     templates:[
@@ -300,8 +351,14 @@ const THEMES = [
       {id:'rs2',  type:'意义·结果', words:['乡民拜谢']},
       {id:'km1',  type:'因果·业力', words:['怨气-1']},
       {id:'km2',  type:'因果·业力', words:['降妖功德+1']},
-      {id:'ev1',  type:'实体·事件', words:['妖声渐息']},
-      {id:'ev2',  type:'实体·事件', words:['邪雾散尽']}
+{id:'ev1',  type:'实体·事件', words:['妖声渐息']},
+      {id:'ev2',  type:'实体·事件', words:['邪雾散尽']},
+      {id:'og1',  type:'实体·组织', words:['山门道院','道门宗盟']},
+      {id:'cl1',  type:'实体·讯息', words:['异闻呢喃','谶语']},
+      {id:'wd1',  type:'实体·异类', words:['狐仙','尸煞','水鬼']},
+      {id:'ob1',  type:'实体·障碍', words:['妖阵挡道','封井石']},
+      {id:'st1',  type:'属性·状态', words:['中邪失神','血气两亏']},
+      {id:'cs1',  type:'因果·代价', words:['折损阳寿','烧了道行']}
     ],
     combo:['趁{env}设坛{act}', '以{item}{cnt}封镇', '择{choice}则{res}', '{evt}，妖氛为之一清'],
     templates:[
@@ -345,7 +402,13 @@ const THEMES = [
       {id:'km1',  type:'因果·业力', words:['信义+1']},
       {id:'km2',  type:'因果·业力', words:['道上人情+1']},
       {id:'ev1',  type:'实体·事件', words:['风波渐平']},
-      {id:'ev2',  type:'实体·事件', words:['前后镖车会合']}
+{id:'ev2',  type:'实体·事件', words:['前后镖车会合']},
+      {id:'og1',  type:'实体·组织', words:['镖局总号','黑风寨']},
+      {id:'cl1',  type:'实体·讯息', words:['道上暗话','驿马急信']},
+      {id:'wd1',  type:'实体·异类', words:['山魈夜嚎','虎迹拦路']},
+      {id:'ob1',  type:'实体·障碍', words:['塌方断路','劫匪伏哨']},
+      {id:'st1',  type:'属性·状态', words:['人困马乏','镖头带伤']},
+      {id:'cs1',  type:'因果·代价', words:['折了纹银','折损驮马']},
     ],
     combo:['于{env}中{act}', '押{item}共{cnt}', '限{time}交讫', '{res}记入信义账'],
     templates:[
@@ -389,7 +452,13 @@ const THEMES = [
       {id:'km1',  type:'因果·业力', words:['阴德+1']},
       {id:'km2',  type:'因果·业力', words:['医缘+1']},
       {id:'ev1',  type:'实体·事件', words:['瘴退病愈']},
-      {id:'ev2',  type:'实体·事件', words:['药炉白烟续起']}
+{id:'ev2',  type:'实体·事件', words:['药炉白烟续起']},
+      {id:'og1',  type:'实体·组织', words:['邻镇药行','施药棚']},
+      {id:'cl1',  type:'实体·讯息', words:['霜疫文书','山民口信']},
+      {id:'wd1',  type:'实体·异类', words:['守药山精','坟头野狐']},
+      {id:'ob1',  type:'实体·障碍', words:['崖路崩坍','瘴锁山口']},
+      {id:'st1',  type:'属性·状态', words:['高热不退','虚损难支']},
+      {id:'cs1',  type:'因果·代价', words:['自损气血','耗尽参片']},
     ],
     combo:['趁{env}{act}', '以{item}{cnt}入药', '{time}为药力大限', '{res}后{evt}'],
     templates:[
@@ -470,7 +539,7 @@ function buildDemo(themeId){
   const t = theme(themeId);
   const byType = byTypeOf(t);
   const first = type => { const l = byType[type] || []; return l.length ? l[0].words[0] : '？'; };
-  const demoTypes = ['req','env','npc','item','cnt','time','limit','skill','act','choice','res','karma','evt'];
+  const demoTypes = ['req','env','npc','org','item','cnt','time','limit','skill','act','obs','clue','choice','cst','res','karma','weird','evt','sta','loc'];
   const chain = demoTypes.map(id => { const s = SLOT[id]; return { id, cat:s.cat, type:s.type, label:s.label, content:first(s.type) }; });
   const req2 = { id:'req2', cat:'意义', type:'意义·需求', label:'新需求节点（回环锚）', content:first('意义·需求') };
   chain.push(req2);
@@ -478,8 +547,8 @@ function buildDemo(themeId){
     ['req','env'],['env','npc'],['npc','item'],['item','cnt'],['cnt','time'],['time','limit'],
     ['limit','act'],['skill','act'],['act','choice'],['choice','res'],['res','karma'],['karma','evt'],['evt','req']
   ];
-  const E = edges.map(x => ({ from:x[0], to:x[1], pred:EDGES.find(e => e.from === x[0] && e.to === x[1]).pred }));
-  return { chain, edges:E, log:['固定骨架「化缘链 v1」：14 节点 13 边对照模式。'] };
+const E = EDGES.map(x => ({ from:x.from, to:x.to, pred:x.pred }));
+  return { chain, edges:E, log:['固定骨架「化缘链 v2」：21 节点 20 边对照模式。'] };
 }
 
 /* ---------- 渲染 ---------- */
@@ -590,11 +659,13 @@ function renderThemes(){
 function renderWordbank(){
   const t = theme(state.themeId);
   if(!t){ $('#wb').innerHTML = ''; return; }
-  const by = byTypeOf(t);
+const by = byTypeOf(t);
+  const sem = Object.fromEntries(SLOTS.map(s => [s.type, s.semantic]));
   let html = '';
   for(const ty of Object.keys(by).sort()){
     html += `<div class="g"><div class="gl">${ty} <b>（${LABEL(ty)}）</b></div>` +
-      by[ty].map(n => n.words.map(w => `<span class="chip">${w}</span>`).join('')).join('') + `</div>`;
+      by[ty].map(n => n.words.map(w => `<span class="chip">${w}</span>`).join('')).join('') +
+      (sem[ty] ? `<div class="sem">原子：${sem[ty]}</div>` : '') + `</div>`;
   }
   $('#wb').innerHTML = html;
 }
@@ -613,16 +684,17 @@ function setStatus(stage, extra){
 
 /* ---------- 任务合述（{预留字} 正则替换 · 由节点统一生成） ---------- */
 const TYPE_TOKEN = {
-  '意义·需求':'需求', '属性·环境':'环境', '实体·人物':'人物', '实体·物品':'物品', '实体·地点':'地点',
-  '属性·数量':'数量', '属性·时间':'时间', '约束·限制':'限制', '属性·能力':'能力', '关系·动作':'动作',
-  '选择·道德选择':'选择', '意义·结果':'结果', '因果·业力':'业力', '实体·事件':'事件'
+  '意义·需求':'需求', '属性·环境':'环境', '实体·人物':'人物', '实体·组织':'组织', '实体·物品':'物品',
+  '实体·讯息':'线索', '实体·异类':'怪异', '实体·地点':'地点', '属性·数量':'数量', '属性·时间':'时间',
+  '约束·限制':'限制', '实体·障碍':'障碍', '属性·能力':'能力', '属性·状态':'状态', '关系·动作':'动作',
+  '选择·道德选择':'选择', '意义·结果':'结果', '因果·代价':'代价', '因果·业力':'业力', '实体·事件':'事件'
 };
 const GENERIC_TEMPLATES = [
-  '为{需求}，于{环境}遇{人物}，其处{地点}，持有{物品}{数量}；须在{时间}{动作}，守{限制}，凭{能力}成事。临{选择}之择：成则{结果}、{业力}；{事件}后，新{需求}又起。',
-  '{需求}：{人物}困于{环境}，留于{地点}，需{物品}{数量}；限{时间}，凭{能力}{动作}，守{限制}；行至{选择}，得{结果}，{业力}随之；{事件}，再起{需求}。',
-  '{环境}之中，{人物}之{需求}未解；取{物品}{数量}，{时间}{动作}（{限制}）。{选择}一念，成{结果}、积{业力}；{事件}毕，又生{需求}。'
+  '为{需求}，于{环境}遇{人物}，托{组织}之势，闻{线索}之传，其处{地点}，持有{物品}{数量}，带{状态}；须在{时间}{动作}，守{限制}，破{障碍}，凭{能力}成事。临{选择}之择：成则{结果}、付{代价}，{业力}随之；{事件}后，新{需求}又起，而{怪异}遁于暗处。',
+  '{需求}：{人物}困于{环境}，落{状态}，闻{线索}，{组织}与之结约，留于{地点}，需{物品}{数量}；限{时间}，凭{能力}{动作}，守{限制}，与{障碍}相周旋；行至{选择}，得{结果}，付{代价}，{业力}随之；{怪异}窥伺其侧，{事件}，再起{需求}。',
+  '{环境}之中，{人物}之{需求}未解；取{物品}{数量}，{时间}凭{能力}{动作}（{限制}），探至{地点}。{选择}一念，成{结果}、积{业力}；付{代价}以偿，闻{线索}而进，破{障碍}，托{组织}之助，携{状态}而行；{事件}毕，又生{需求}，而{怪异}环伺。'
 ];
-const TOKEN_RE = /\{(需求|环境|人物|物品|地点|数量|时间|限制|能力|动作|选择|结果|业力|事件)\}/g;
+const TOKEN_RE = /\{(需求|环境|人物|组织|物品|线索|怪异|地点|数量|时间|限制|障碍|能力|状态|动作|选择|结果|代价|业力|事件)\}/g;
 
 function queueByToken(){
   const q = {};
@@ -634,6 +706,7 @@ function queueByToken(){
 }
 function cleanText(s, mc, tplIdx){
   const miss = tk => !!mc[tk];
+  const missSlot = (tk, n) => (mc[tk] || []).includes(n);
   const isT2 = tplIdx % 3 === 1;
   s = s.replace(/\s{2,}/g, ' ');
   if(miss('环境')){
@@ -642,14 +715,21 @@ function cleanText(s, mc, tplIdx){
   }
   if(miss('人物')){ s = s.replace(/遇[，、；]/g, ''); s = s.replace(/^之/, ''); s = s.replace(/([，、；])之/g, '$1'); }
   if(miss('物品')) s = s.replace(/持有[，、；]?/g, '');
-  if(miss('物品') && miss('数量')) s = s.replace(/取/g, '');
-  if(miss('地点')){ s = s.replace(/其处[，、]/g, '其'); s = s.replace(/留于[，、；]?/g, ''); }
+  if(miss('物品')) s = s.replace(/取[，、]?/g, '');
+  if(miss('地点')){ s = s.replace(/其处[，、]/g, '其'); s = s.replace(/留于[，、；]?/g, ''); s = s.replace(/探至[，、。；]?/g, ''); }
   if(miss('事件')){ s = s.replace(/^后[，、]?/, ''); s = s.replace(/毕[，、；，]/g, ''); s = s.replace(/毕$/, ''); }
   if(miss('选择')){ s = s.replace(/临之择/, ''); s = s.replace(/临[，、]?一念[，、]?/g, ''); s = s.replace(/行至[，、；]?/g, ''); s = s.replace(/：/g, ''); }
   if(miss('时间')) s = s.replace(/限[，、；]?/g, '');
+  if(miss('组织')) s = s.replace(/托之势[，、；]?|托之助[，、；]?/g, '');
+  if(miss('线索')) s = s.replace(/闻(之传|而进)?[，、；]?/g, '');
+  if(miss('怪异')) s = s.replace(/而遁于暗处[，。]?|窥伺其侧[，、；]?|而环伺[，。；]?/g, '');
+  if(miss('障碍')) s = s.replace(/破[，、；]?|与相周旋[，、；]?/g, '');
+  if(miss('状态')) s = s.replace(/携而行[，、；]?/g, '').replace(/带[，、；]?|落[，、；]?|携[，、；]?/g, '');
+  if(miss('代价')) s = s.replace(/付以偿[，、；]?/g, '').replace(/付[，、；。]?/g, '');
   if(isT2 && miss('能力')) s = s.replace(/凭/, '');
-  if(mc['需求'] === 1) s = s.replace(/^为[，、；]?/, '');
-  if(mc['需求'] >= 2) s = s.replace(/毕。$/, '。');
+  if(tplIdx % 3 === 2 && miss('能力')) s = s.replace(/凭(?=[^，。；])/, '');
+  if(missSlot('需求', 1)) s = s.replace(/^为[，、；]?/, '');
+  if(missSlot('需求', 2)) s = s.replace(/毕[，、。；]?/g, '');
   s = s.replace(/新[，、]?又起/g, '');
   s = s.replace(/又生(?=[，。；]|$)/g, '');
   s = s.replace(/再起(?=[，。；]|$)/g, '');
@@ -671,7 +751,7 @@ function buildSentencePlain(){
   const tpl = GENERIC_TEMPLATES[i % GENERIC_TEMPLATES.length];
   const out = tpl.replace(TOKEN_RE, (m, tk) => {
     const v = (q[tk] || []).shift();
-    if(!v) mc[tk] = (mc[tk] || 0) + 1;
+    if(!v) (mc[tk] = mc[tk] || []).push((mc[tk].length || 0) + 1);
     return v || '';
   });
   return cleanText(out, mc, i);
@@ -710,7 +790,7 @@ function buildJSON(){
   const t = theme(state.themeId);
   const reopened = state.chain[state.chain.length - 1];
   const obj = {
-    meta: { tool: '事件积木·肌理选择器', version: '0.3.2', mode: state.mode === 'roam' ? '随机漫游（逆序构建）' : '固定骨架示范',
+    meta: { tool: '事件积木·肌理选择器', version: '0.3.3', mode: state.mode === 'roam' ? '随机漫游（逆序构建）' : '固定骨架示范',
             generation: '后置决定前置 · 缘起结构（此有故彼有）', atomModel: '21 原子 · 10 大类' },
     result: {
       theme: t.name, tagline: t.tagline, tone: t.tone, story: t.story,
@@ -851,6 +931,6 @@ function doDownload(){
 /* ---------- 启动 ---------- */
 apply(THEMES[0].id);
 
-window.__t = { apply, roam, reroll, state, buildJSON, THEMES, LINK, PRED };</script>
+window.__t = { apply, roam, reroll, state, buildJSON, THEMES, LINK, PRED, TYPE_TOKEN, GENERIC_TEMPLATES, SLOTS };</script>
 </body>
 </html>
