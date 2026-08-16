@@ -60,6 +60,7 @@ svg#graph{ width:100%; height:100%; background:#10131a; border-radius:10px; bord
 .node.fill .cnt{ fill:#e5e7eb; }
 .node .nid{ font-size:9.5px; fill:#4b5366; }
 .node .nid .o{ fill:#3d4557; }
+.node .lnk{ font-size:8.5px; fill:#8b93a7; }
 .node .nm{ stroke-width:2.5; fill:none; opacity:0; }
 .node.fill .nm{ opacity:1; }
 .node.loop .bg{ stroke-dasharray:5 4; }
@@ -400,7 +401,7 @@ const THEMES = [
 ];
 
 /* ---------- 布局 ---------- */
-const W = 170, H = 72;
+const W = 170, H = 86;
 function chainPos(i, total){
   const row = Math.floor(i / 5), col = i % 5;
   const xc = (row % 2 === 1) ? (4 - col) : col;
@@ -512,12 +513,18 @@ function render(){
     nm.setAttribute('stroke', filled ? color : '#2a2f3d');
     if(state.sel === s.id) g.classList.add('sel');
     if(i === state.chain.length - 1 && s.type === '意义·需求') g.classList.add('loop');
-    const t1 = g.appendChild(el('text', { x:10, y:17, class:'cls' }, s.cat + ' · ' + s.type));
+const t1 = g.appendChild(el('text', { x:10, y:16, class:'cls' }, s.cat + ' · ' + s.type));
     t1.setAttribute('fill', filled ? color : '#6f788c');
-    g.appendChild(el('text', { x:10, y:40, class:'cnt' }, filled ? s.content : '？待演绎'));
-    g.appendChild(el('text', { x:10, y:61, class:'nid' }, s.id + ' ' + s.label));
+    g.appendChild(el('text', { x:10, y:38, class:'cnt' }, filled ? s.content : '？待演绎'));
+    g.appendChild(el('text', { x:10, y:58, class:'nid' }, s.id + ' ' + s.label));
     const outArr = state.edges.filter(e => e.from === s.id);
-    g.appendChild(el('text', { x:W - 10, y:61, class:'nid o', 'text-anchor':'end' }, '出链 ' + outArr.length));
+    g.appendChild(el('text', { x:W - 10, y:58, class:'nid o', 'text-anchor':'end' }, '出链 ' + outArr.length));
+    const links = LINK[s.type] || [];
+    const short = links.map(x => x.split('·')[1]);
+    const lnkTxt = '链接：' + short.slice(0, 6).join('/') + (short.length > 6 ? '…+' + (short.length - 6) : '');
+    const lnk = g.appendChild(el('text', { x:10, y:78, class:'lnk' }, lnkTxt));
+    lnk.setAttribute('fill', filled ? '#8b93a7' : '#4b5366');
+    g.setAttribute('title', links.map(to => PRED[s.type + '>' + to] + ' → ' + to).join('\n'));
     g.addEventListener('click', () => selectNode(s.id));
   }
 
@@ -549,12 +556,17 @@ function selectNode(id){
   const inE = state.edges.filter(e => e.to === id);
   const outE = state.edges.filter(e => e.from === id);
   const desc = e => { const nb = nodeById(e.from === id ? e.to : e.from); return `[${nb ? nb.type : '?'}] ${e.pred}`; };
+  const abilities = (LINK[s.type] || []).map(to => {
+    const p = PRED[s.type + '>' + to];
+    return `<div style="color:#9aa4bd">「${p || '（未定义谓词）'}」 → ${to}</div>`;
+  }).join('');
   let html = `<span class="d-name" style="color:${color}">${s.label}</span>` +
     `<div class="d-type" style="color:${color}">${s.cat} · ${s.type} ｜ ${t ? t.name : ''}肌理 ｜ ${s.id}</div>` +
     `<div class="d-content">${s.content}</div>` +
     `<div class="links"><div><b>入链</b><br>${inE.length ? inE.map(desc).join('<br>') : '（无入链）'}</div>` +
     `<div style="margin-top:6px"><b>出链</b><br>${outE.length ? outE.map(desc).join('<br>') : '（无出链，链已到头）'}</div>` +
-    `<div style="margin-top:6px;color:#7b8496;font-size:11px"><b>可链接类型</b><br>${(LINK[s.type]||['无']).join(' / ')}</div></div>`;
+    `<div style="margin-top:6px;color:#7b8496;font-size:11px"><b>可链接类型</b><br>${(LINK[s.type]||['无']).join(' / ')}</div>` +
+    `<div style="margin-top:6px;color:#7b8496;font-size:11px"><b>可生成链接语（节点能力）</b><br>${abilities || '（无）'}</div></div>`;
   $('#detail').innerHTML = html;
 }
 
@@ -628,9 +640,9 @@ function cleanText(s, mc, tplIdx){
     s = miss('人物') ? s.replace(/于遇/g, '') : s.replace(/于遇/g, '遇');
     s = s.replace(/^之中[，、]?/, '');
   }
-  if(miss('人物')){ s = s.replace(/遇[，、；]/g, ''); s = s.replace(/^之/, ''); }
+  if(miss('人物')){ s = s.replace(/遇[，、；]/g, ''); s = s.replace(/^之/, ''); s = s.replace(/([，、；])之/g, '$1'); }
   if(miss('物品')) s = s.replace(/持有[，、；]?/g, '');
-  if(miss('物品') && miss('数量')) s = s.replace(/取[，、]/, '取');
+  if(miss('物品') && miss('数量')) s = s.replace(/取/g, '');
   if(miss('地点')){ s = s.replace(/其处[，、]/g, '其'); s = s.replace(/留于[，、；]?/g, ''); }
   if(miss('事件')){ s = s.replace(/^后[，、]?/, ''); s = s.replace(/毕[，、；，]/g, ''); s = s.replace(/毕$/, ''); }
   if(miss('选择')){ s = s.replace(/临之择/, ''); s = s.replace(/临[，、]?一念[，、]?/g, ''); s = s.replace(/行至[，、；]?/g, ''); s = s.replace(/：/g, ''); }
@@ -645,8 +657,8 @@ function cleanText(s, mc, tplIdx){
   if(miss('限制')) s = s.replace(/守[，、；]/g, '');
   if(miss('能力')) s = s.replace(/凭成事/, '成事');
   s = s.replace(/[，、；]{2,}/g, m => m[0]);
-  s = s.replace(/[，、；]([。；])/g, '$1');
   s = s.replace(/（[，、；。]*）/g, '');
+  s = s.replace(/[，、；]([。；])/g, '$1');
   s = s.replace(/^[，、；。：]+/g, '').replace(/[，、；]+$/g, '');
   s = s.replace(/([。；，、])\s*$/g, '。').replace(/。+/g, '。');
   if(!/。$/.test(s)) s += '。';
@@ -698,7 +710,7 @@ function buildJSON(){
   const t = theme(state.themeId);
   const reopened = state.chain[state.chain.length - 1];
   const obj = {
-    meta: { tool: '事件积木·肌理选择器', version: '0.3.1', mode: state.mode === 'roam' ? '随机漫游（逆序构建）' : '固定骨架示范',
+    meta: { tool: '事件积木·肌理选择器', version: '0.3.2', mode: state.mode === 'roam' ? '随机漫游（逆序构建）' : '固定骨架示范',
             generation: '后置决定前置 · 缘起结构（此有故彼有）', atomModel: '21 原子 · 10 大类' },
     result: {
       theme: t.name, tagline: t.tagline, tone: t.tone, story: t.story,
@@ -839,6 +851,6 @@ function doDownload(){
 /* ---------- 启动 ---------- */
 apply(THEMES[0].id);
 
-window.__t = { apply, roam, reroll, state, buildJSON, THEMES };</script>
+window.__t = { apply, roam, reroll, state, buildJSON, THEMES, LINK, PRED };</script>
 </body>
 </html>
